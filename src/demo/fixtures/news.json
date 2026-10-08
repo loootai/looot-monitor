@@ -1,0 +1,9 @@
+{
+  "searchParameters": { "q": "\"Tallyroom\"", "type": "news", "engine": "google" },
+  "news": [
+    { "title": "Tallyroom brings invoice approvals to its iPad app", "link": "https://thestudiodesk.example/news/tallyroom-ipad-approvals?utm_source=feed", "snippet": "Studio leads can now approve draft invoices from the iPad app before they go to clients.", "date": "2026-10-08T07:40:00Z", "source": "The Studio Desk", "position": 1 },
+    { "title": "What design studios charge for brand work in 2026", "link": "https://studiobrief.example/reports/brand-rates-2026", "snippet": "Survey of 310 studios, with invoicing data shared by Tallyroom and two other tools.", "date": "3 hours ago", "source": "Studio Brief", "position": 2 },
+    { "link": "https://inkandmargin.example/no-title" }
+  ],
+  "credits": 1
+}

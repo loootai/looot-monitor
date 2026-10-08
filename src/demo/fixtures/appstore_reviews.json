@@ -1,0 +1,8 @@
+{
+  "search_metadata": { "status": "Success" },
+  "reviews": [
+    { "id": "11920348812", "title": "The 4.2.1 update fixed recurring invoices", "text": "Monthly invoices are going out again. Thank you for the quick fix.", "rating": 5, "username": "Marguerite O.", "review_date": "2026-10-08T05:10:00Z" },
+    { "id": "11920351140", "title": "Needs a dark mode for invoices", "text": "The app is dark, the invoice preview is bright white.", "rating": "3", "author": { "name": "Viktor H." }, "date": "2026-10-07T21:44:00Z" },
+    { "rating": 4 }
+  ]
+}

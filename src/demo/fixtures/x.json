@@ -1,0 +1,7 @@
+{
+  "tweets": [
+    { "id": "18480031", "text": "First month on Tallyroom done. Sent 22 invoices, 19 paid inside a week.", "url": "https://x.example/lune_et_ligne/status/18480031", "createdAt": "2026-10-08T08:12:00Z", "likeCount": 14, "retweetCount": 2, "author": { "userName": "lune_et_ligne", "name": "Lune et Ligne" } },
+    { "id_str": "18480077", "full_text": "Is there a Tallyroom integration for Linear yet?", "created_at": "2026-10-08T08:31:00Z", "favorite_count": 1, "user": { "screen_name": "obi_makes", "name": "Obinna Achebe" } },
+    { "id": "18480090" }
+  ]
+}

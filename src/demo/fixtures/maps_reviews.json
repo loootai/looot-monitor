@@ -1,0 +1,7 @@
+{
+  "reviews": [
+    { "id": "ChdDSUhNMG9nS0VJQ0FnSUR", "rating": 5, "snippet": "Quick turnaround on 500 folded brochures. The paper advice saved us money.", "isoDate": "2026-10-06T15:20:00Z", "user": { "name": "Thandiwe M.", "link": "https://maps.example/contrib/1042" } },
+    { "rating": 2, "snippet": "Order was a day late and one box was the wrong stock.", "date": "2 days ago", "user": { "name": "Per-Olof S." } },
+    { "user": { "name": "No content" } }
+  ]
+}

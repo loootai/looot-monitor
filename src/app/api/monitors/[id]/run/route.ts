@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { body, fail, withSession } from "@/lib/http";
+import { runNow } from "@/lib/service";
+
+export const maxDuration = 120;
+const input = z.object({ confirmId: z.string().min(6).max(80), maxCostMicros: z.number().int().positive().optional() });
+
+/**
+ * Paid. Runs one monitor now. The body carries the id made when the quote was shown, which is the
+ * idempotency key, and the max cost the user confirmed. A second post with the same id charges nothing.
+ */
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return withSession(async ({ store }) => {
+    const parsed = input.safeParse(await body(req));
+    if (!parsed.success) return fail(400, "Confirm the quote first.");
+    const monitor = await store.getMonitor((await ctx.params).id);
+    if (!monitor) return fail(404, "This monitor was deleted.");
+    const out = await runNow(store, monitor, parsed.data.confirmId, parsed.data.maxCostMicros);
+    if ("ok" in out) return fail(out.status, out.error, { code: "no_token" });
+    return NextResponse.json({ outcome: out });
+  });
+}

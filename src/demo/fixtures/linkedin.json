@@ -1,0 +1,7 @@
+{
+  "posts": [
+    { "text": "We moved our 9 person studio to Tallyroom in September. Two things I would do again and one I would not.", "url": "https://linkedin.example/posts/emeka-vandermeer-7252901", "postedAt": "2026-10-08T06:55:00Z", "numLikes": 73, "author": { "name": "Emeka van der Meer" } },
+    { "commentary": "Looking for a bookkeeper who knows Tallyroom and UK VAT.", "postUrl": "https://linkedin.example/posts/saoirse-tanaka-7252988", "stats": { "likes": 9 }, "authorName": "Saoirse Tanaka" },
+    { "url": "https://linkedin.example/posts/empty" }
+  ]
+}

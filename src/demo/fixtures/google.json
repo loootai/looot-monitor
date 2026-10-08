@@ -1,0 +1,9 @@
+{
+  "searchParameters": { "q": "Tallyroom alternatives", "gl": "us", "hl": "en", "num": 10 },
+  "organic": [
+    { "title": "Tool Reviewer: Tallyroom review and alternatives", "link": "https://toolreviewer.example/tallyroom-alternatives", "snippet": "Seven tools compared on price, retainers and client portal.", "position": 1 },
+    { "title": "Software Shelf: top rated invoicing software for studios", "link": "https://softwareshelf.example/invoicing/design-studios", "snippet": "Ratings from 2,100 verified studio owners.", "position": 2 },
+    { "title": "Paperkite: proposals, contracts and invoices", "link": "https://paperkite.example/compare/tallyroom", "snippet": "See how Paperkite compares with Tallyroom.", "position": 3, "date": "Oct 5, 2026" },
+    { "title": "No link here" }
+  ]
+}
