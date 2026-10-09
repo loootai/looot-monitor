@@ -1,4 +1,4 @@
-import { checkGuards } from "./budget";
+import { checkGuards, type GuardResult } from "./budget";
 import { dedupe } from "./dedupe";
 import { toMicros, usd, usdPrecise } from "./money";
 import { PARSERS, parsePage, parseScreenshot } from "./parse";
@@ -22,6 +22,8 @@ export interface RunDeps {
   store: Store;
   looot: Runner;
   prices: PriceMap;
+  /** Endpoint ids whose live price could not be read. A run that needs one of them is refused. */
+  unpriced?: readonly string[];
   now: Date;
   /** Demo mode: results come from recorded fixtures, rows are marked "demo" and cost nothing. */
   demo?: boolean;
@@ -63,7 +65,9 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
   const priceOf = (source: SourceId) => prices[endpointFor(source, monitor.config)] ?? 0;
   const livePriceMicros = sources.reduce((n, s) => n + priceOf(s), 0) + (withShot ? prices[SOURCES.screenshot.endpointId] ?? 0 : 0);
   const month = monthStart(now).toISOString();
-  const guard = checkGuards({
+  const needed = [...sources.map((s) => endpointFor(s, monitor.config)), ...(withShot ? [SOURCES.screenshot.endpointId] : [])];
+  const unread = deps.demo ? [] : needed.filter((id) => (deps.unpriced ?? []).includes(id));
+  const checked = checkGuards({
     livePriceMicros,
     confirmedMaxMicros: monitor.maxCostPerRunMicros,
     monitorSpentMicros: await store.spentSince(month, monitor.id),
@@ -71,6 +75,8 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
     workspaceSpentMicros: await store.spentSince(month),
     workspaceCapMicros: settings.workspaceCapMicros,
   });
+  // A price nobody could read is not a price the user confirmed. Refuse before any call.
+  const guard: GuardResult = unread.length > 0 ? { ok: false, status: "blocked_price", scope: "price", message: `The live price of ${unread.join(", ")} could not be read. No call was made.` } : checked;
 
   const baseRun = (source: SourceId): Omit<Run, "id" | "ownerId" | "status"> => ({
     monitorId: monitor.id,
@@ -94,7 +100,7 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
     const reset = nextMonthStart(now);
     const alert =
       guard.status === "blocked_price"
-        ? systemAlert(monitor, now, `price:${slot.toISOString()}`, `${monitor.name} was not run: the price is above your max`, `Price ${usdPrecise(livePriceMicros)} is above the confirmed max ${usdPrecise(monitor.maxCostPerRunMicros)}`)
+        ? systemAlert(monitor, now, `price:${slot.toISOString()}`, unread.length > 0 ? `${monitor.name} was not run: the live price could not be read` : `${monitor.name} was not run: the price is above your max`, unread.length > 0 ? "Live price could not be read" : `Price ${usdPrecise(livePriceMicros)} is above the confirmed max ${usdPrecise(monitor.maxCostPerRunMicros)}`)
         : guard.scope === "monitor"
           ? systemAlert(monitor, now, `budget:${month.slice(0, 7)}`, `${monitor.name} reached its ${usd(monitor.monthlyCapMicros)} cap. Paused until ${shortDate(reset)}.`, "Monthly cap reached")
           : systemAlert(monitor, now, `workspace-budget:${month.slice(0, 7)}`, `The workspace reached its ${usd(settings.workspaceCapMicros)} cap. ${monitor.name} was not run.`, "Workspace cap reached");

@@ -59,7 +59,7 @@ export async function runNow(store: Store, monitor: Monitor, confirmId: string, 
   let m = monitor;
   if (maxCostMicros && maxCostMicros !== monitor.maxCostPerRunMicros) m = (await store.updateMonitor(monitor.id, { maxCostPerRunMicros: maxCostMicros, confirmedAt: now().toISOString() })) ?? monitor;
   const looot = IS_DEMO ? fixtureRunner(store, m.id) : loootFromEnv();
-  return runMonitor({ store, looot, prices: prices.prices, now: now(), demo: IS_DEMO }, m, { trigger: "manual", confirmId });
+  return runMonitor({ store, looot, prices: prices.prices, unpriced: prices.unread, now: now(), demo: IS_DEMO }, m, { trigger: "manual", confirmId });
 }
 
 /** How many mention alerts would get a different severity under edited rules. */

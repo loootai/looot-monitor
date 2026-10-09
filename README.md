@@ -83,7 +83,7 @@ Prices read from the free public catalog on 2026-10-08. The "Price dated" column
 | Google Maps reviews | `maps.place.reviews` | `serper-reviews` | $0.0010 | 2026-10-05 | Unverified |
 | App Store reviews | `reviews.appstore.reviews` | `searchapi-io-apple-product-reviews` | $0.0040 | 2026-09-21 | Unverified |
 
-The app runs a pinned endpoint per source because search inputs differ between providers. It reads the live price from `GET https://api.looot.ai/v1/public-catalog/{endpointId}` (free, no token), caches it for an hour, and falls back to the table above (`src/lib/sources.ts`).
+The app runs a pinned endpoint per source because search inputs differ between providers. It reads the live price from `GET https://api.looot.ai/v1/public-catalog/{endpointId}` (free, no token), and caches it for an hour. When the catalog cannot be read, the quote panel shows the prices in the table above (`src/lib/sources.ts`) with their date and a warning, and a run that needs an unread price is refused.
 
 "Unverified" means the parser was written from the provider's public docs and a fixture, not from a real response, because no paid run was made while building this. Those parsers are tolerant: a missing field gives an item with fewer fields, not a crash. The first real run of such a source may still need a small parser fix. The Settings page lists the same status per source.
 
@@ -93,7 +93,7 @@ What the demo setup costs: a mentions monitor on all four sources is $0.0056 per
 
 1. Any paid action first calls `POST /api/quote` (free). It returns one line per source, the per-run total, runs per month for the schedule, and the projected month.
 2. You confirm a max cost per run and a monthly cap. Both are stored on the monitor.
-3. Before each call the server reads the price again. If the run would cost more than the max you confirmed, it makes no call, records the run as `blocked_price` and writes a system alert.
+3. Before each call the server reads the price again. If the run would cost more than the max you confirmed, or the price of one of its endpoints cannot be read, it makes no call, records the run as `blocked_price` and writes a system alert.
 4. Before each run the server sums the month's actual cost for the monitor. If that plus the max is above the cap, it makes no call, sets the monitor to "Paused, budget reached" and writes a system alert. A workspace cap in Settings applies the same check across all monitors.
 5. Each call carries an idempotency key. A scheduled run uses `mon:{monitorId}:{source}:{slot}`, so a cron retry for the same slot cannot charge twice. The `runs` table has a unique index on it as well.
 6. A failed looot run costs nothing and is recorded with its error code.

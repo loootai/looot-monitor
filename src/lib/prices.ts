@@ -14,6 +14,8 @@ export interface PriceResult {
   prices: PriceMap;
   pricesAsOf: string;
   source: "catalog" | "fallback";
+  /** Endpoints whose live price could not be read just now. Their price in `prices` is the dated fallback. */
+  unread: string[];
 }
 
 interface CatalogItem {
@@ -30,27 +32,27 @@ export function priceOfItem(item: CatalogItem | null | undefined): number | null
 
 /**
  * Free, no token needed. Reads current prices for the given endpoints from the public catalog,
- * cached for an hour. Any endpoint that cannot be read keeps its fallback price, and the result
- * says "fallback" so the UI can show the date.
+ * cached for an hour. Any endpoint that cannot be read keeps its fallback price for display, the result
+ * says "fallback" so the UI can show the date, and `unread` names it so the runner refuses to call it.
  */
 export async function fetchPrices(endpointIds: string[] = ENDPOINT_IDS, opts: { baseUrl?: string; fetch?: typeof fetch; now?: Date; demo?: boolean } = {}): Promise<PriceResult> {
-  if (opts.demo) return { prices: { ...FALLBACK_PRICES }, pricesAsOf: `${PRICES_AS_OF}T09:00:00.000Z`, source: "catalog" };
+  if (opts.demo) return { prices: { ...FALLBACK_PRICES }, pricesAsOf: `${PRICES_AS_OF}T09:00:00.000Z`, source: "catalog", unread: [] };
   const base = (opts.baseUrl ?? process.env.LOOOT_API_URL ?? "https://api.looot.ai").replace(/\/+$/, "");
   const f = opts.fetch ?? fetch;
   const prices: PriceMap = { ...FALLBACK_PRICES };
-  let missed = 0;
+  const unread: string[] = [];
   await Promise.all(
     endpointIds.map(async (id) => {
       try {
         const res = await f(`${base}/v1/public-catalog/${encodeURIComponent(id)}`, { next: { revalidate: 3600 } } as RequestInit);
         const price = res.ok ? priceOfItem((await res.json()) as CatalogItem) : null;
-        if (price === null) missed++;
+        if (price === null) unread.push(id);
         else prices[id] = price;
       } catch {
-        missed++;
+        unread.push(id);
       }
     }),
   );
-  if (missed > 0) return { prices, pricesAsOf: `${PRICES_AS_OF}T00:00:00.000Z`, source: "fallback" };
-  return { prices, pricesAsOf: (opts.now ?? new Date()).toISOString(), source: "catalog" };
+  if (unread.length > 0) return { prices, pricesAsOf: `${PRICES_AS_OF}T00:00:00.000Z`, source: "fallback", unread };
+  return { prices, pricesAsOf: (opts.now ?? new Date()).toISOString(), source: "catalog", unread: [] };
 }

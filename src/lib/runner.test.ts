@@ -47,6 +47,23 @@ describe("runMonitor guards", () => {
     expect(alerts[0]).toMatchObject({ kind: "system", severity: "medium" });
   });
 
+  it("refuses with blocked_price when the live price of a needed endpoint could not be read, and calls nothing", async () => {
+    const { store, monitor } = await setup("mention", { query: "Tallyroom", sources: ["news"] }, { maxCostPerRunMicros: 1000 });
+    const client = looot(async () => ok(news));
+    const out = await runMonitor({ store, looot: client, prices: FALLBACK_PRICES, unpriced: ["serper-news"], now: NOW }, monitor, { trigger: "schedule" });
+    expect(out.status).toBe("blocked_price");
+    expect(client.runAndWait).toHaveBeenCalledTimes(0);
+    expect((await store.listAlerts({ monitorId: monitor.id }))[0].title).toContain("the live price could not be read");
+  });
+
+  it("an unread price for an endpoint the monitor does not use does not block it", async () => {
+    const { store, monitor } = await setup("mention", { query: "Tallyroom", sources: ["news"] }, { maxCostPerRunMicros: 1000 });
+    const client = looot(async () => ok(news));
+    const out = await runMonitor({ store, looot: client, prices: FALLBACK_PRICES, unpriced: ["serper-reviews"], now: NOW }, monitor, { trigger: "schedule" });
+    expect(out.status).toBe("ran");
+    expect(client.runAndWait).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses with blocked_budget when month spend plus the max is above the cap, calls nothing and pauses the monitor", async () => {
     const { store, monitor } = await setup("mention", { query: "Tallyroom", sources: ["news"] }, { maxCostPerRunMicros: 1000, monthlyCapMicros: 5000 });
     await store.insertRun({ monitorId: monitor.id, source: "news", trigger: "schedule", slot: "2026-10-03T00:00:00.000Z", idempotencyKey: "earlier", endpointId: "serper-news", loootRunId: "r", status: "completed", quotedMicros: 1000, actualCostMicros: 4500, newItems: 0, errorCode: null, errorMessage: null, startedAt: "2026-10-03T00:00:00.000Z", finishedAt: null });

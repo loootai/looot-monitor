@@ -35,7 +35,7 @@ export async function GET(req: Request) {
     try {
       const monitor = (await store.getMonitor(row.id as string)) as Monitor | null;
       if (!monitor) continue;
-      const out = await runMonitor({ store, looot, prices: prices.prices, now: at }, monitor, { trigger: "schedule" });
+      const out = await runMonitor({ store, looot, prices: prices.prices, unpriced: prices.unread, now: at }, monitor, { trigger: "schedule" });
       results.push({ monitor: monitor.id, status: out.status, costMicros: out.costMicros, newAlerts: out.newAlerts });
     } catch (e) {
       results.push({ monitor: row.id as string, status: `error: ${(e as Error).message}`, costMicros: 0, newAlerts: 0 });
