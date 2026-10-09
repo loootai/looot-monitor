@@ -137,7 +137,12 @@ export function MonitorForm({ mode, initial, initialKind, initialQuote, prices, 
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      // The fields are marked invalid on the next render, so look for the first one after it.
+      requestAnimationFrame(() => {
+        const first = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+        first?.focus({ preventScroll: true });
+        first?.scrollIntoView({ block: "center" });
+      });
       return;
     }
     setSaving(run ? "run" : "save");
