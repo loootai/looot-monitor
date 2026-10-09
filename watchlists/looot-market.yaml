@@ -1,0 +1,149 @@
+# looot's own market watchlist: pricing pages and changelogs of data API aggregators,
+# contact and company data providers, search and scraping APIs, MCP registries, and the
+# Claude Code and MCP release notes.
+#
+# 53 pages. One run reads each page once with serper-webpage at $0.002 a page:
+#   53 x $0.002 = $0.106 a run, $3.18 a month at one run a day (list price, 2026-10-08).
+# A failed read costs nothing, so the real spend is at or under that.
+#
+# Every URL answered HTTP 200 to a plain GET on 2026-10-09. Left out because they did not:
+#   treg.to/changelog (404), serpapi.com/changelog (404), apollo.io/product-updates (404),
+#   docs.firecrawl.dev/changelog (404), pulsemcp.com (403), glama.ai/pricing (redirects to sign-up).
+# Serper has no pricing or changelog page of its own. Its prices are on the home page.
+#
+# Run it:   npm run watch -- --config watchlists/looot-market.yaml --out digests/
+# Preview:  npm run watch -- --config watchlists/looot-market.yaml --dry-run
+
+name: looot market
+reader: serper-webpage
+maxSpendPerRunUsd: 0.12
+monthlyCapUsd: 4
+ignore:
+  - "^copyright"
+  - "all rights reserved"
+  - "^©"
+
+groups:
+  - name: Aggregators and direct competitors
+    watchFor: ["MCP", "pay as you go", "pay-as-you-go", "prepaid"]
+    pages:
+      - name: treg home
+        url: https://treg.to/
+      - name: treg pricing
+        url: https://treg.to/pricing
+      - name: treg llms.txt
+        url: https://treg.to/llms.txt
+      - name: Clay pricing
+        url: https://www.clay.com/pricing
+      - name: Clay changelog
+        url: https://www.clay.com/changelog
+      - name: Composio pricing
+        url: https://composio.dev/pricing
+      - name: Composio changelog
+        url: https://docs.composio.dev/reference/changelog
+      - name: OpenRouter pricing
+        url: https://openrouter.ai/pricing
+      - name: OpenRouter FAQ (fees)
+        url: https://openrouter.ai/docs/faq
+      - name: OpenRouter blog
+        url: https://openrouter.ai/blog/
+
+  - name: Contact and company data
+    watchFor: ["MCP", "pay as you go", "pay-as-you-go"]
+    pages:
+      - name: Apollo pricing
+        url: https://www.apollo.io/pricing
+      - name: Apollo API changelog
+        url: https://docs.apollo.io/changelog
+      - name: Hunter pricing
+        url: https://hunter.io/pricing
+      - name: Hunter changelog
+        url: https://hunter.io/changelog
+      - name: People Data Labs pricing
+        url: https://www.peopledatalabs.com/pricing/person
+      - name: People Data Labs changelog
+        url: https://docs.peopledatalabs.com/changelog
+      - name: ZoomInfo pricing
+        url: https://www.zoominfo.com/pricing
+      - name: Lusha pricing
+        url: https://www.lusha.com/pricing/
+      - name: RocketReach pricing
+        url: https://rocketreach.co/pricing
+      - name: Prospeo pricing
+        url: https://prospeo.io/pricing
+      - name: Icypeas pricing
+        url: https://www.icypeas.com/pricing
+      - name: FullEnrich pricing
+        url: https://fullenrich.com/pricing
+      - name: BetterContact pricing
+        url: https://bettercontact.rocks/pricing/
+
+  - name: Search and scraping APIs
+    watchFor: ["MCP", "pay as you go", "pay-as-you-go"]
+    pages:
+      - name: SerpApi pricing
+        url: https://serpapi.com/pricing
+      - name: Serper home (pricing)
+        url: https://serper.dev/
+      - name: Tavily pricing
+        url: https://www.tavily.com/pricing
+      - name: Tavily API credits
+        url: https://docs.tavily.com/documentation/api-credits
+      - name: Tavily changelog
+        url: https://docs.tavily.com/changelog
+      - name: Exa pricing
+        url: https://exa.ai/pricing
+      - name: Exa changelog
+        url: https://exa.ai/docs/changelog
+      - name: Firecrawl pricing
+        url: https://www.firecrawl.dev/pricing
+      - name: Firecrawl changelog
+        url: https://www.firecrawl.dev/changelog
+      - name: Bright Data pricing
+        url: https://brightdata.com/pricing
+      - name: Bright Data SERP API pricing
+        url: https://brightdata.com/pricing/serp
+      - name: Bright Data web scraper pricing
+        url: https://brightdata.com/pricing/web-scraper
+      - name: Bright Data release notes
+        url: https://docs.brightdata.com/release-notes
+      - name: Apify pricing
+        url: https://apify.com/pricing
+      - name: Apify change log
+        url: https://apify.com/change-log
+
+  - name: MCP registries
+    pages:
+      - name: Official MCP registry
+        url: https://registry.modelcontextprotocol.io/
+      - name: Official MCP registry releases
+        url: https://github.com/modelcontextprotocol/registry/releases
+      - name: Smithery pricing
+        url: https://smithery.ai/pricing
+      - name: Glama MCP servers
+        url: https://glama.ai/mcp/servers
+      - name: mcp.so home
+        url: https://mcp.so/
+      - name: MCP Market home
+        url: https://mcpmarket.com/
+
+  - name: Claude Code and MCP
+    pages:
+      - name: Claude Code changelog
+        url: https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md
+      - name: Claude Agent SDK changelog (TypeScript)
+        url: https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md
+      - name: Claude platform release notes
+        url: https://platform.claude.com/docs/en/release-notes/overview
+      - name: Claude pricing
+        url: https://claude.com/pricing
+      - name: MCP spec releases
+        url: https://github.com/modelcontextprotocol/modelcontextprotocol/releases
+      - name: MCP spec changelog
+        url: https://modelcontextprotocol.io/specification/latest/changelog
+      - name: MCP roadmap
+        url: https://modelcontextprotocol.io/development/roadmap
+      - name: MCP blog
+        url: https://blog.modelcontextprotocol.io/
+      - name: MCP TypeScript SDK releases
+        url: https://github.com/modelcontextprotocol/typescript-sdk/releases

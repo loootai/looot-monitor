@@ -26,6 +26,50 @@ Open http://localhost:3210. Demo mode needs no Supabase project and no looot tok
 
 In demo mode you can force a state on Inbox, Monitors, Monitor detail, Spend and Digest with `?state=loading`, `?state=empty` or `?state=error`. `?theme=dark` and `?theme=light` set the theme for one view.
 
+## Run it without the UI
+
+One command checks a list of pages, compares each with the last text it saw, and writes a markdown digest. It needs a looot token and nothing else: no Supabase project, no sign-in, no server.
+
+```bash
+npm ci
+npm run watch -- --config watchlists/looot-market.yaml --dry-run          # no looot call, prints the pages and the list-price total
+LOOOT_TOKEN=<your agent token> npm run watch -- --config watchlists/looot-market.yaml --out digests/
+```
+
+A run prints the quoted cost, reads each page once, and writes `digests/YYYY-MM-DD.md`: per changed page, a table of prices that moved (before, after, percent), the edited lines as old and new text, and the new lines, which is where a new changelog entry shows up. Failed pages are listed with their looot error code. The first run of a page stores a snapshot and reports no change.
+
+The watchlist is a YAML file:
+
+```yaml
+name: My market
+reader: serper-webpage        # $0.002 a page, known response shape. jina-reader is $0.0002, unverified.
+maxSpendPerRunUsd: 0.12       # pages past this are not called
+monthlyCapUsd: 4              # calendar month, UTC
+groups:
+  - name: Competitors
+    watchFor: ["pay as you go"]   # a changed line with this phrase makes the alert high
+    pages:
+      - name: Acme pricing
+        url: https://acme.example/pricing
+        ignore: ["^Trusted by"]   # lines to drop before comparing, regular expressions
+```
+
+`ignore` and `watchFor` work at the top, on a group and on a page. `maxPricePerPageUsd` raises the price a page may cost. Without it, a page is refused when looot's live price is above the list price in `src/lib/sources.ts`. `maxChars` (default 200,000) is how much of a page is stored and compared.
+
+It is the same code as the app: `src/headless/watch.ts` builds a page monitor per URL and calls `runMonitor`, so the price guard, the monthly cap, the diff and the severity rules are the ones described below. State (the last text of each page, and the month's runs with their cost) lives in `state/<watchlist name>.json`. Each page has one idempotency key per UTC day, so a second run in the same day makes no call. `--force` runs again and is charged again.
+
+[`watchlists/looot-market.yaml`](watchlists/looot-market.yaml) is the list looot runs on its own market: 53 pricing pages and changelogs, $0.106 a run at list price.
+
+### On a schedule with GitHub Actions
+
+`.github/workflows/watch.yml` runs the watchlist every day at 06:17 UTC and commits the digest and the state to the repository. To turn it on in your copy of this repo:
+
+1. Settings, Secrets and variables, Actions, New repository secret. Name `LOOOT_TOKEN`, value a looot agent token with `runs.execute`.
+2. Optional: a repository variable `WATCHLIST` with the path of your own file. The default is `watchlists/looot-market.yaml`.
+3. Actions, watch, Run workflow. Tick `dry_run` first to see the quote in the log.
+
+Without the secret the job ends with a notice and spends nothing. In a public repository the digests and the stored page text are public too, so use a private copy if your watchlist is not something to show.
+
 ## Screens
 
 | | |
@@ -156,13 +200,14 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
 npm test            # vitest, looot is mocked
 npm run test:rls    # row level security on a throwaway Postgres
+npm run watch -- --config watchlists/looot-market.yaml --dry-run   # the headless run, no looot call
 npm run build
 npm run leak-scan   # secret and internal-string scan, also the pre-commit hook
 ```
 
 Turn the hook on once per clone with `git config core.hooksPath .githooks`. Dependencies are pinned to exact versions and `.npmrc` sets `ignore-scripts=true`.
 
-The pure logic lives in `src/lib` with tests beside it: `quote.ts`, `budget.ts`, `runner.ts` (price guard, cap guard, idempotency), `pageDiff.ts`, `serpDiff.ts`, `severity.ts`, `dedupe.ts`, `parse/` (one parser per source, tested against the fixtures in `src/demo/fixtures`) and `digest.ts` (`renderDigest` returns a subject, table-layout HTML with inline styles, and plain text).
+The pure logic lives in `src/lib` with tests beside it: `quote.ts`, `budget.ts`, `runner.ts` (price guard, cap guard, idempotency), `pageDiff.ts`, `serpDiff.ts`, `severity.ts`, `dedupe.ts`, `parse/` (one parser per source, tested against the fixtures in `src/demo/fixtures`) and `digest.ts` (`renderDigest` returns a subject, table-layout HTML with inline styles, and plain text). `src/headless` is the run without the UI: `watchlist.ts` (the YAML file), `watch.ts` (plan and run) and `markdown.ts` (the digest).
 
 ## Not yet
 

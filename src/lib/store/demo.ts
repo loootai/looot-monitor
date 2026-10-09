@@ -13,6 +13,16 @@ export class MemoryStore implements Store {
 
   constructor(seed?: Seed) {
     this.#d = seed ?? { settings: { ...buildEmptySettings() }, monitors: [], runs: [], alerts: [], snapshots: [], serp: [] };
+    // Rows loaded from a file were numbered by an earlier process. Start numbering after them.
+    for (const row of [...this.#d.monitors, ...this.#d.runs, ...this.#d.alerts, ...this.#d.snapshots, ...this.#d.serp]) {
+      const n = /-n(\d+)$/.exec(row.id);
+      if (n) seq = Math.max(seq, Number(n[1]));
+    }
+  }
+
+  /** A copy of everything in the store, for writing to a file. */
+  dump(): Seed {
+    return structuredClone(this.#d);
   }
 
   async getSettings(): Promise<Settings> {

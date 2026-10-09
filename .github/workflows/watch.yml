@@ -1,0 +1,77 @@
+# Checks a watchlist once a day and commits the digest and the last-seen state.
+# Needs one repository secret, LOOOT_TOKEN. Without it the job ends with a notice and spends nothing.
+# The run is capped by maxSpendPerRunUsd and monthlyCapUsd in the watchlist file.
+name: watch
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # 06:17 UTC, every day
+  workflow_dispatch:
+    inputs:
+      config:
+        description: Watchlist file. Empty uses the WATCHLIST repository variable, then watchlists/looot-market.yaml.
+        required: false
+        default: ""
+      dry_run:
+        description: Make no looot call. Print what would run and the list-price total.
+        type: boolean
+        default: false
+      force:
+        description: Run again in a day that already ran. It is charged again.
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LOOOT_TOKEN: ${{ secrets.LOOOT_TOKEN }}
+      CONFIG: ${{ inputs.config || vars.WATCHLIST || 'watchlists/looot-market.yaml' }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      FORCE: ${{ inputs.force }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check the watchlist
+        id: watch
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            npm run -s watch -- --config "$CONFIG" --dry-run
+            exit 0
+          fi
+          if [ -z "$LOOOT_TOKEN" ]; then
+            echo "::notice::LOOOT_TOKEN is not set, so nothing ran. Add it under Settings, Secrets and variables, Actions."
+            exit 0
+          fi
+          flags=()
+          if [ "$FORCE" = "true" ]; then flags+=(--force); fi
+          echo "ran=true" >> "$GITHUB_OUTPUT"
+          npm run -s watch -- --config "$CONFIG" --out digests/ "${flags[@]}"
+
+      - name: Commit the digest and the state
+        if: always() && steps.watch.outputs.ran == 'true'
+        run: |
+          mkdir -p digests state
+          git add digests state
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "watch: digest for $(date -u +%F)"
+          git push
