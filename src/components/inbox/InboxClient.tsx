@@ -129,7 +129,7 @@ export function InboxClient({ alerts, state, counts, monitors, volume, selectedI
     (id: string, opts: { open?: boolean } = {}) => {
       setSel(id);
       const a = rows.find((r) => r.id === id);
-      if (opts.open && window.matchMedia("(max-width: 767px)").matches) {
+      if (opts.open && window.matchMedia("(max-width: 1023px)").matches) {
         router.push(`/alerts/${id}`);
         return;
       }
@@ -165,6 +165,10 @@ export function InboxClient({ alerts, state, counts, monitors, volume, selectedI
     },
     [visible, sel, overrides, apply, state, router, hrefFor, send, toast],
   );
+
+  // A filter or a search can hide the alert in the reading pane. The pane then shows "No alert selected"
+  // instead of an alert that is not in the list.
+  const selVisible = sel !== null && visible.some((a) => a.id === sel);
 
   const targets = React.useCallback(() => (picked.size > 0 ? [...picked] : sel ? [sel] : []), [picked, sel]);
   const markDone = React.useCallback(() => {
@@ -310,7 +314,7 @@ export function InboxClient({ alerts, state, counts, monitors, volume, selectedI
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div ref={listRef} className="scroll-thin w-full shrink-0 overflow-y-auto border-line bg-panel md:w-[360px] md:border-r xl:w-[440px]" role="region" aria-label="Alerts">
+        <div ref={listRef} className="scroll-thin w-full shrink-0 overflow-y-auto border-line bg-panel lg:w-[360px] lg:border-r xl:w-[440px]" role="region" aria-label="Alerts">
           {picked.size > 0 ? (
             <div className="sticky top-0 z-20 flex h-10 items-center gap-2 border-b border-line bg-brand-soft px-3 text-12">
               <span className="font-medium text-link">{picked.size} selected</span>
@@ -348,7 +352,7 @@ export function InboxClient({ alerts, state, counts, monitors, volume, selectedI
                   const isSel = a.id === sel;
                   const isPicked = picked.has(a.id);
                   return (
-                    <li key={a.id} id={`row-${a.id}`} className={cn("group relative flex h-14 items-stretch border-b border-line", isSel ? "hover:bg-hover md:bg-brand-soft md:hover:bg-brand-soft" : "hover:bg-hover", isPicked && !isSel && "bg-hover")}>
+                    <li key={a.id} id={`row-${a.id}`} className={cn("group relative flex h-14 items-stretch border-b border-line", isSel ? "hover:bg-hover lg:bg-brand-soft lg:hover:bg-brand-soft" : "hover:bg-hover", isPicked && !isSel && "bg-hover")}>
                       <SeverityBar severity={a.severity} />
                       <button type="button" role="checkbox" aria-checked={isPicked} aria-label={`Select: ${a.title}`} onClick={() => setPicked((p) => toggle(p, a.id))} className="flex w-9 shrink-0 items-center justify-center pl-1.5 text-faint hover:text-ink">
                         <span className={cn(isPicked ? "block" : "hidden group-focus-within:block group-hover:block")}>{isPicked ? <SquareCheck className="size-4 text-link" /> : <Square className="size-4" />}</span>
@@ -392,14 +396,14 @@ export function InboxClient({ alerts, state, counts, monitors, volume, selectedI
             </div>
           ) : null}
           {visible.length > 0 ? (
-            <p className="hidden items-center gap-1.5 px-4 py-3 text-11 text-faint md:flex">
+            <p className="hidden items-center gap-1.5 px-4 py-3 text-11 text-faint lg:flex">
               <Kbd>j</Kbd>
               <Kbd>k</Kbd> move <Kbd>e</Kbd> done <Kbd>h</Kbd> snooze <Kbd>u</Kbd> unread <Kbd>?</Kbd> all keys
             </p>
           ) : null}
         </div>
-        <section aria-label="Selected alert" aria-busy={pending} className={cn("scroll-thin hidden min-w-0 flex-1 overflow-y-auto bg-panel transition-opacity duration-100 md:block", pending && "opacity-60")}>
-          {sel ? children : <Empty title="No alert selected" note="Pick an alert from the list to read it here." />}
+        <section aria-label="Selected alert" aria-busy={pending} className={cn("scroll-thin hidden min-w-0 flex-1 overflow-y-auto bg-panel transition-opacity duration-100 lg:block", pending && "opacity-60")}>
+          {sel && (selVisible || !filtered) ? children : <Empty title="No alert selected" note="Pick an alert from the list to read it here." />}
         </section>
       </div>
     </div>

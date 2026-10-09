@@ -169,7 +169,7 @@ export default async function MonitorPage({ params, searchParams }: { params: Pr
       <dl className="grid grid-cols-2 border-b border-line md:grid-cols-4">
         <Stat label="Open alerts" value={openAlerts} />
         <Stat label="Runs this month" value={monthSlots} sub={`${monthRuns.length} looot calls`} />
-        <Stat label="Spent this month / cap" value={<>{usd(monthMicros)} <span className="text-13 font-normal text-mute">/ {usd(monitor.monthlyCapMicros)}</span></>} />
+        <Stat label="Spent this month / cap" value={<span className="whitespace-nowrap">{usd(monthMicros)} <span className="text-13 font-normal text-mute">/ {usd(monitor.monthlyCapMicros)}</span></span>} />
         <Stat label="Average cost per run" value={monthSlots > 0 ? usdPrecise(Math.round(monthMicros / monthSlots)) : usdPrecise(quote.perRunMicros)} sub={`quote ${usdPrecise(quote.perRunMicros)}`} />
       </dl>
 

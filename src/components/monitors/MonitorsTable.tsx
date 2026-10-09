@@ -54,6 +54,9 @@ function StatusCell({ m }: { m: MonitorRow }) {
 }
 
 /** The monitors table with search, filters, sort, bulk pause and the row menu. Stacked rows on phones. */
+/** Columns that only fit beside the rail on wide screens. Each value is also on the monitor page. */
+const WIDE = "hidden min-[1400px]:table-cell";
+
 export function MonitorsTable({ rows, canRun, initialRunId }: { rows: MonitorRow[]; canRun: boolean; initialRunId?: string }) {
   const router = useRouter();
   const toast = useToast();
@@ -187,8 +190,8 @@ export function MonitorsTable({ rows, canRun, initialRunId }: { rows: MonitorRow
         </Empty>
       ) : (
         <>
-          <div className="hidden overflow-x-auto bg-panel md:block">
-            <Table className="min-w-[980px] [&_td]:px-2 [&_th]:px-2">
+          <div className="relative hidden overflow-x-auto bg-panel lg:block">
+            <Table className="[&_td]:px-2 [&_th]:px-2">
               <caption className="sr-only">Monitors</caption>
               <thead>
                 <tr>
@@ -196,12 +199,12 @@ export function MonitorsTable({ rows, canRun, initialRunId }: { rows: MonitorRow
                     <input type="checkbox" aria-label="Select all monitors" className="size-3.5 accent-[var(--brand)]" checked={picked.size === visible.length} onChange={(e) => setPicked(e.target.checked ? new Set(visible.map((m) => m.id)) : new Set())} />
                   </Th>
                   {sortTh("name", "Name")}
-                  <Th>Type</Th>
+                  <Th className={WIDE}>Type</Th>
                   <Th>Target</Th>
-                  <Th>Sources</Th>
-                  <Th>Schedule</Th>
+                  <Th className={WIDE}>Sources</Th>
+                  <Th className="hidden xl:table-cell">Schedule</Th>
                   {sortTh("lastRunAt", "Last run")}
-                  <Th>Next run</Th>
+                  <Th className={WIDE}>Next run</Th>
                   {sortTh("openAlerts", "Open", "text-right")}
                   {sortTh("monthMicros", "Month / cap")}
                   <Th className="w-10">
@@ -226,23 +229,23 @@ export function MonitorsTable({ rows, canRun, initialRunId }: { rows: MonitorRow
                         </span>
                       </span>
                     </Td>
-                    <Td className="whitespace-nowrap text-mute">{KIND_NAME[m.kind]}</Td>
+                    <Td className={cn(WIDE, "whitespace-nowrap text-mute")}>{KIND_NAME[m.kind]}</Td>
                     <Td className="num max-w-44 truncate text-12 text-mute" title={targetOf(m)}>
                       {middle(targetOf(m), 26)}
                     </Td>
-                    <Td>
+                    <Td className={WIDE}>
                       <span className="flex gap-1.5">
                         {m.sources.map((s) => (
                           <SourceIcon key={s} source={s} className="size-3.5" />
                         ))}
                       </span>
                     </Td>
-                    <Td className="whitespace-nowrap text-mute">{SCHEDULE_LABEL[m.schedule]}</Td>
+                    <Td className="hidden whitespace-nowrap text-mute xl:table-cell">{SCHEDULE_LABEL[m.schedule]}</Td>
                     <Td className="whitespace-nowrap">
                       <span className="tabular-nums">{relative(m.lastRunAt)}</span>
                       <span className={cn("block text-11", m.lastResult.startsWith("failed") ? "text-high" : "text-mute")}>{m.lastResult}</span>
                     </Td>
-                    <Td className="whitespace-nowrap tabular-nums text-mute">{m.status === "paused" ? "paused" : relative(m.nextRunAt)}</Td>
+                    <Td className={cn(WIDE, "whitespace-nowrap tabular-nums text-mute")}>{m.status === "paused" ? "paused" : relative(m.nextRunAt)}</Td>
                     <Td className="num text-right">{m.openAlerts}</Td>
                     <Td>
                       <span className="flex items-center gap-2">
@@ -260,7 +263,7 @@ export function MonitorsTable({ rows, canRun, initialRunId }: { rows: MonitorRow
               </tbody>
             </Table>
           </div>
-          <ul className="divide-y divide-line bg-panel md:hidden">
+          <ul className="divide-y divide-line bg-panel lg:hidden">
             {visible.map((m) => (
               <li key={m.id} className="flex items-start gap-2 py-3 pl-4 pr-1">
                 <div className="min-w-0 flex-1">

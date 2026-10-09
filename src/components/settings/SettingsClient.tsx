@@ -281,7 +281,7 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
                     <Td className="num text-12 text-mute">{r.jobId}</Td>
                     <Td className="num text-12">{r.endpointId}</Td>
                     <Td className="num text-right">{usdPrecise(r.priceMicros)}</Td>
-                    <Td className="num text-12 text-mute">{r.priceDated}</Td>
+                    <Td className="num whitespace-nowrap text-12 text-mute">{r.priceDated}</Td>
                     <Td className="md:last:pr-3">{r.shapeVerified ? <Badge tone="brand">Verified</Badge> : <Badge tone="amber">Unverified</Badge>}</Td>
                   </tr>
                 ))}
