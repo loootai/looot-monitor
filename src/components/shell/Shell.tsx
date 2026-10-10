@@ -1,15 +1,13 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
-import Link from "next/link";
+import { AppShell, type ShellNavSection } from "@/components/AppShell";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Ellipsis, Inbox, LogOut, Mail, Monitor as MonitorIcon, Moon, Plus, Radar, Search, Settings as SettingsIcon, Sun, Wallet } from "lucide-react";
+import { LogOut, Monitor as MonitorIcon, Search, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge, Kbd } from "@/components/ui/misc";
+import { Kbd } from "@/components/ui/misc";
 import { Dialog, DialogContent, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, TooltipProvider, Tip } from "@/components/ui/overlay";
 import { ToastProvider } from "@/components/ui/toast";
-import { CapBar, StatusDot } from "@/components/visuals";
 import { usd } from "@/lib/money";
 import type { MonitorStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -25,12 +23,25 @@ export interface ShellData {
   monthLabel: string;
 }
 
-const NAV = [
-  { href: "/", label: "Inbox", icon: Inbox, keys: "g i" },
-  { href: "/monitors", label: "Monitors", icon: Radar, keys: "g m" },
-  { href: "/digest", label: "Digest", icon: Mail, keys: "g d" },
-  { href: "/spend", label: "Spend", icon: Wallet, keys: "g s" },
-  { href: "/settings", label: "Settings", icon: SettingsIcon, keys: "" },
+const NAV: ShellNavSection[] = [
+  {
+    items: [
+      { href: "/", label: "Inbox", icon: "inbox", also: ["/alerts"] },
+      { href: "/monitors", label: "Monitors", icon: "radar" },
+      { href: "/digest", label: "Digest", icon: "mail" },
+      { href: "/spend", label: "Spend", icon: "wallet" },
+      { href: "/settings", label: "Settings", icon: "settings" },
+    ],
+  },
+];
+
+/** Go-to shortcuts and the palette entries share these. */
+const GO: { href: string; label: string; keys: string }[] = [
+  { href: "/", label: "Inbox", keys: "g i" },
+  { href: "/monitors", label: "Monitors", keys: "g m" },
+  { href: "/digest", label: "Digest", keys: "g d" },
+  { href: "/spend", label: "Spend", keys: "g s" },
+  { href: "/settings", label: "Settings", keys: "" },
 ];
 
 const KEYS: [string, string][] = [
@@ -58,7 +69,7 @@ function titleFor(path: string): string {
   if (path === "/monitors/new") return "New monitor";
   if (path.endsWith("/edit")) return "Edit monitor";
   if (path.startsWith("/monitors/")) return "Monitor";
-  return NAV.find((n) => n.href !== "/" && path.startsWith(n.href))?.label ?? "looot-monitor";
+  return GO.find((n) => n.href !== "/" && path.startsWith(n.href))?.label ?? "looot-monitor";
 }
 
 type Theme = "light" | "dark" | "system";
@@ -69,19 +80,6 @@ function applyTheme(t: Theme) {
   try {
     localStorage.setItem("theme", t);
   } catch {}
-  window.dispatchEvent(new CustomEvent("themechange"));
-}
-
-/** true while the page shows the dark theme. Follows the class on <html>. */
-export function useIsDark(): boolean {
-  return React.useSyncExternalStore(
-    (cb) => {
-      window.addEventListener("themechange", cb);
-      return () => window.removeEventListener("themechange", cb);
-    },
-    () => document.documentElement.classList.contains("dark"),
-    () => false,
-  );
 }
 
 const typing = (e: KeyboardEvent) => {
@@ -93,12 +91,11 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
   const path = usePathname();
   const router = useRouter();
   const params = useSearchParams();
-  const dark = useIsDark();
   const [palette, setPalette] = React.useState(false);
   const [keys, setKeys] = React.useState(false);
-  const [more, setMore] = React.useState(false);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const gAt = React.useRef(0);
+  const flipTheme = React.useCallback(() => applyTheme(document.documentElement.classList.contains("dark") ? "light" : "dark"), []);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -127,7 +124,6 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
     return () => window.removeEventListener("keydown", onKey);
   }, [router]);
 
-  const active = (href: string) => (href === "/" ? path === "/" || path.startsWith("/alerts") : path.startsWith(href));
   const signOut = async () => {
     if (!data.demo) {
       const { browserSupabase } = await import("@/lib/supabase/browser");
@@ -139,68 +135,20 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
   return (
     <TooltipProvider>
       <ToastProvider>
-        <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[70] focus:rounded-control focus:bg-panel focus:px-3 focus:py-2 focus:shadow-pop">
-          Skip to content
-        </a>
-        <div className="flex h-dvh">
-          <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-panel md:flex">
-            <Link href="/" className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
-              <Image src="/brand/looot-mark.svg" alt="looot" width={24} height={24} priority />
-              <span className="text-13 font-medium tracking-tight">monitor</span>
-            </Link>
-            <nav aria-label="Main" className="flex flex-col gap-px p-2">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined} className={cn("flex h-8 items-center gap-2 rounded-control px-2 text-mute transition-colors duration-100 hover:bg-hover hover:text-ink", active(n.href) && "bg-brand-soft font-medium text-link hover:bg-brand-soft hover:text-link")}>
-                  <n.icon className="size-4" aria-hidden />
-                  <span className="flex-1">{n.label}</span>
-                  {n.href === "/" && data.unreadCount > 0 ? <span className="num text-11">{data.unreadCount}</span> : null}
-                </Link>
-              ))}
-            </nav>
-            <div className="flex items-center justify-between px-4 pb-1 pt-3">
-              <span className="text-11 font-medium text-mute">Monitors</span>
-              <Tip label="New monitor (n)">
-                <Link href="/monitors/new" aria-label="New monitor" className="flex size-6 items-center justify-center rounded-control text-mute hover:bg-hover hover:text-ink">
-                  <Plus className="size-3.5" />
-                </Link>
-              </Tip>
-            </div>
-            <nav aria-label="Monitors" className="scroll-thin flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2 pb-2">
-              {data.monitors.length === 0 ? <p className="px-2 py-1 text-12 text-faint">None yet</p> : null}
-              {data.monitors.map((m) => (
-                <Link key={m.id} href={`/monitors/${m.id}`} aria-current={path === `/monitors/${m.id}` ? "page" : undefined} className={cn("flex h-7 items-center gap-2 rounded-control px-2 text-12 text-mute hover:bg-hover hover:text-ink", path.startsWith(`/monitors/${m.id}`) && "bg-hover text-ink")}>
-                  <StatusDot status={m.status} className="size-1.5" />
-                  <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                  {m.unread > 0 ? <span className="num text-11 text-ink">{m.unread}</span> : null}
-                </Link>
-              ))}
-            </nav>
-            <Link href="/spend" className="block border-t border-line px-4 py-3 hover:bg-hover">
-              <div className="flex items-baseline justify-between">
-                <span className="text-11 text-mute">{data.monthLabel} spend</span>
-                <span className="num text-11 text-mute">cap {usd(data.capMicros)}</span>
-              </div>
-              <div className="num mt-0.5 text-14 font-medium">{usd(data.monthMicros)}</div>
-              <CapBar spent={data.monthMicros} cap={data.capMicros} className="mt-1.5 w-full" />
-            </Link>
-          </aside>
-
-          <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 md:px-4">
-              <Link href="/" className="md:hidden" aria-label="looot-monitor home">
-                <Image src="/brand/looot-mark.svg" alt="" width={24} height={24} />
-              </Link>
-              <h1 className="truncate text-16 font-semibold tracking-tight">{titleFor(path)}</h1>
-              {data.demo ? (
-                <Tip label="Seeded data with a fixed clock. No looot call is made." side="bottom">
-                  <Badge tone="amber" className="shrink-0" tabIndex={0}>
-                    Demo data
-                  </Badge>
-                </Tip>
-              ) : null}
+        <AppShell
+          appName="looot-monitor"
+          githubHref="https://github.com/loootai/looot-monitor"
+          nav={NAV}
+          demoLabel={data.demo ? "Demo data, fixed clock, no looot call" : undefined}
+          spend={{ label: `${data.monthLabel} spend, cap ${usd(data.capMicros)}`, spent: usd(data.monthMicros), ratio: data.capMicros > 0 ? data.monthMicros / data.capMicros : 0 }}
+          primaryAction={{ href: "/monitors/new", label: "New monitor" }}
+        >
+          <div className="flex h-[calc(100dvh-56px)] flex-col lg:h-[calc(100dvh-52px)]">
+            <h1 className="sr-only">{titleFor(path)}</h1>
+            <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 md:px-4">
               <form
                 role="search"
-                className="relative ml-auto hidden w-64 sm:block"
+                className="relative min-w-0 flex-1 sm:max-w-sm"
                 onSubmit={(e) => {
                   e.preventDefault();
                   const q = searchRef.current?.value.trim() ?? "";
@@ -208,23 +156,18 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
                 }}
               >
                 <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-faint" aria-hidden />
-                <input ref={searchRef} name="q" defaultValue={path === "/" ? (params.get("q") ?? "") : ""} aria-label="Search alerts" placeholder="Search alerts" className="h-8 w-full rounded-control border border-line bg-page pl-7 pr-8 text-13 hover:border-line-strong focus-visible:border-emerald focus-visible:outline-offset-0" />
-                <Kbd className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2">/</Kbd>
+                <input ref={searchRef} name="q" defaultValue={path === "/" ? (params.get("q") ?? "") : ""} aria-label="Search alerts" placeholder="Search alerts" className="h-9 w-full rounded-control border border-line bg-page pl-7 pr-8 text-13 hover:border-line-strong focus-visible:border-emerald focus-visible:outline-offset-0" />
+                <Kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 sm:inline-flex">/</Kbd>
               </form>
-              <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
+              <div className="ml-auto flex items-center gap-0.5">
                 <Tip label="Command palette (⌘K)" side="bottom">
                   <Button variant="ghost" size="icon" aria-label="Open command palette" onClick={() => setPalette(true)} className="hidden sm:inline-flex">
                     <span className="num text-11 text-mute">⌘K</span>
                   </Button>
                 </Tip>
-                <Tip label={dark ? "Switch to light" : "Switch to dark"} side="bottom">
-                  <Button variant="ghost" size="icon" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} onClick={() => applyTheme(dark ? "light" : "dark")}>
-                    {dark ? <Sun /> : <Moon />}
-                  </Button>
-                </Tip>
                 <Menu>
                   <MenuTrigger asChild>
-                    <button type="button" aria-label="Account menu" className="ml-1 flex size-8 items-center justify-center rounded-full bg-brand text-11 font-medium text-brand-ink">
+                    <button type="button" aria-label="Account menu" className="ml-1 flex size-9 items-center justify-center rounded-full bg-brand text-11 font-medium text-brand-ink">
                       {data.user.name
                         .split(/\s+/)
                         .map((w) => w[0])
@@ -255,45 +198,10 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
                   </MenuContent>
                 </Menu>
               </div>
-            </header>
-            <main id="main" className="scroll-thin min-h-0 flex-1 overflow-y-auto pb-16 md:pb-0">
-              {children}
-            </main>
-          </div>
-        </div>
-
-        <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 grid h-14 grid-cols-4 border-t border-line bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
-          {[NAV[0], NAV[1], NAV[3]].map((n) => (
-            <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined} className={cn("relative flex flex-col items-center justify-center gap-0.5 text-11 text-mute", active(n.href) && "font-medium text-link")}>
-              <n.icon className="size-5" aria-hidden />
-              {n.label}
-              {n.href === "/" && data.unreadCount > 0 ? <span className="num absolute right-[calc(50%-22px)] top-1.5 rounded-full bg-brand px-1 text-[10px] leading-4 text-brand-ink">{data.unreadCount}</span> : null}
-            </Link>
-          ))}
-          <button type="button" onClick={() => setMore(true)} className={cn("flex flex-col items-center justify-center gap-0.5 text-11 text-mute", (active("/digest") || active("/settings")) && "font-medium text-link")}>
-            <Ellipsis className="size-5" aria-hidden />
-            More
-          </button>
-        </nav>
-
-        <Dialog open={more} onOpenChange={setMore}>
-          <DialogContent title="More" side="bottom">
-            <div className="flex flex-col p-2">
-              {[
-                { href: "/digest", label: "Digest", icon: Mail },
-                { href: "/settings", label: "Settings", icon: SettingsIcon },
-                { href: "/monitors/new", label: "New monitor", icon: Plus },
-              ].map((n) => (
-                <Link key={n.href} href={n.href} onClick={() => setMore(false)} className="flex h-11 items-center gap-3 rounded-control px-3 hover:bg-hover">
-                  <n.icon className="size-4 text-mute" aria-hidden /> {n.label}
-                </Link>
-              ))}
-              <div className="mt-1 border-t border-line px-3 py-3 text-12 text-mute">
-                {data.monthLabel} spend <span className="num text-ink">{usd(data.monthMicros)}</span> of <span className="num">{usd(data.capMicros)}</span>
-              </div>
             </div>
-          </DialogContent>
-        </Dialog>
+            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
+          </div>
+        </AppShell>
 
         <Dialog open={keys} onOpenChange={setKeys}>
           <DialogContent title="Keyboard shortcuts" description="Every shortcut also has a visible control.">
@@ -310,7 +218,7 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
           </DialogContent>
         </Dialog>
 
-        <Palette open={palette} onOpenChange={setPalette} data={data} onKeys={() => setKeys(true)} onTheme={() => applyTheme(dark ? "light" : "dark")} />
+        <Palette open={palette} onOpenChange={setPalette} data={data} onKeys={() => setKeys(true)} onTheme={flipTheme} />
       </ToastProvider>
     </TooltipProvider>
   );
@@ -323,7 +231,7 @@ function Palette({ open, onOpenChange, data, onKeys, onTheme }: { open: boolean;
   const items = React.useMemo(() => {
     const go = (href: string) => () => router.push(href);
     const all = [
-      ...NAV.map((n) => ({ label: n.label, hint: n.keys, group: "Go to", run: go(n.href) })),
+      ...GO.map((n) => ({ label: n.label, hint: n.keys, group: "Go to", run: go(n.href) })),
       { label: "New monitor", hint: "n", group: "Actions", run: go("/monitors/new") },
       { label: "Toggle theme", hint: "", group: "Actions", run: onTheme },
       { label: "Keyboard shortcuts", hint: "?", group: "Actions", run: onKeys },
