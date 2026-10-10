@@ -23,17 +23,20 @@ export interface ShellData {
   monthLabel: string;
 }
 
-const NAV: ShellNavSection[] = [
-  {
-    items: [
-      { href: "/", label: "Inbox", icon: "inbox", also: ["/alerts"] },
-      { href: "/monitors", label: "Monitors", icon: "radar" },
-      { href: "/digest", label: "Digest", icon: "mail" },
-      { href: "/spend", label: "Spend", icon: "wallet" },
-      { href: "/settings", label: "Settings", icon: "settings" },
-    ],
-  },
-];
+/** Sidebar nav. The Monitors item carries the monitor list with unread counts. */
+function navFor(data: ShellData): ShellNavSection[] {
+  return [
+    {
+      items: [
+        { href: "/", label: "Inbox", icon: "inbox", also: ["/alerts"], badge: data.unreadCount },
+        { href: "/monitors", label: "Monitors", icon: "radar", sub: { items: data.monitors.map((m) => ({ href: `/monitors/${m.id}`, label: m.name, badge: m.unread })), max: 8 } },
+        { href: "/digest", label: "Digest", icon: "mail" },
+        { href: "/spend", label: "Spend", icon: "wallet" },
+        { href: "/settings", label: "Settings", icon: "settings" },
+      ],
+    },
+  ];
+}
 
 /** Go-to shortcuts and the palette entries share these. */
 const GO: { href: string; label: string; keys: string }[] = [
@@ -138,7 +141,7 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
         <AppShell
           appName="looot-monitor"
           githubHref="https://github.com/loootai/looot-monitor"
-          nav={NAV}
+          nav={navFor(data)}
           demoLabel={data.demo ? "Demo data, fixed clock, no looot call" : undefined}
           spend={{ label: `${data.monthLabel} spend, cap ${usd(data.capMicros)}`, spent: usd(data.monthMicros), ratio: data.capMicros > 0 ? data.monthMicros / data.capMicros : 0 }}
           primaryAction={{ href: "/monitors/new", label: "New monitor" }}
