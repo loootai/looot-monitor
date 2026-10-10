@@ -1,5 +1,5 @@
 // Checks a watchlist of pages once and writes a markdown digest. No UI, no Supabase, no sign-in.
-//   npm run watch -- --config watchlists/example.yaml --out digests/ [--state file.json] [--dry-run] [--force]
+//   npm run watch -- --config watchlists/looot-market.yaml --out digests/ [--state file.json] [--dry-run] [--force]
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
