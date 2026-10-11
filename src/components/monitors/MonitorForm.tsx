@@ -18,6 +18,7 @@ import { SCHEDULE_LABEL } from "@/lib/schedule";
 import { MENTION_SOURCES, SERPER_WEBPAGE, SOURCES } from "@/lib/sources";
 import type { Monitor, MonitorConfig, MonitorKind, OwnerTag, Schedule, SourceId } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 const KIND_NOTE: Record<MonitorKind, string> = {
   mention: "A name or phrase in news, X, Reddit and LinkedIn.",
@@ -100,7 +101,7 @@ export function MonitorForm({ mode, initial, initialKind, initialQuote, prices, 
     let live = true;
     const t = window.setTimeout(async () => {
       try {
-        const res = await fetch("/api/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, schedule, config }) });
+        const res = await apiFetch("/api/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, schedule, config }) });
         if (res.ok && live) setQuote((await res.json()) as Quote);
       } finally {
         if (live) setQuoting(false);
@@ -148,7 +149,7 @@ export function MonitorForm({ mode, initial, initialKind, initialQuote, prices, 
     setSaving(run ? "run" : "save");
     try {
       const body = { name: name.trim() || suggested || "Untitled monitor", kind, ownerTag, competitorName: ownerTag === "competitor" ? competitorName.trim() || null : null, config, schedule, runHour, maxCostPerRunMicros: maxMicros, monthlyCapMicros: capMicros, run, confirmId: crypto.randomUUID() };
-      const res = await fetch(mode === "edit" ? `/api/monitors/${initial!.id}` : "/api/monitors", { method: mode === "edit" ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await apiFetch(mode === "edit" ? `/api/monitors/${initial!.id}` : "/api/monitors", { method: mode === "edit" ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json()) as { monitor?: Monitor; error?: string; fields?: Record<string, string>; outcome?: { newAlerts: number; status: string } };
       if (!res.ok || !data.monitor) {
         if (data.fields) setErrors(data.fields);

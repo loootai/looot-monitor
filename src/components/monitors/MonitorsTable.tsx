@@ -18,6 +18,7 @@ import { SCHEDULE_LABEL } from "@/lib/schedule";
 import type { Monitor, MonitorKind, MonitorStatus, SourceId } from "@/lib/types";
 import { targetOf } from "@/lib/monitorText";
 import { cn, middle } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 export interface MonitorRow extends Monitor {
   sources: SourceId[];
@@ -30,7 +31,7 @@ type SortKey = "name" | "lastRunAt" | "openAlerts" | "monthMicros";
 
 
 async function call(url: string, method: string, body?: unknown) {
-  const res = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+  const res = await apiFetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `Request failed (${res.status})`);
   return res.json();
 }

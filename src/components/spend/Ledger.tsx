@@ -9,6 +9,7 @@ import { dateTime } from "@/lib/clock";
 import { usdPrecise } from "@/lib/money";
 import type { Run } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 /** Every paid call, newest first, with cursor paging and a CSV export. */
 export function Ledger({ initial, monitorNames }: { initial: Run[]; monitorNames: Record<string, string> }) {
@@ -19,7 +20,7 @@ export function Ledger({ initial, monitorNames }: { initial: Run[]; monitorNames
   const more = async () => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/spend/ledger?before=${encodeURIComponent(rows[rows.length - 1].startedAt)}`);
+      const res = await apiFetch(`/api/spend/ledger?before=${encodeURIComponent(rows[rows.length - 1].startedAt)}`);
       const data = (await res.json()) as { runs?: Run[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not load more");
       const seen = new Set(rows.map((r) => r.id));

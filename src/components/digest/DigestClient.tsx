@@ -11,6 +11,7 @@ import { SEV_LABEL } from "@/components/visuals";
 import { renderDigest, type DigestOptions } from "@/lib/digest";
 import type { Alert, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface Props {
   alerts: Alert[];
@@ -35,7 +36,7 @@ export function DigestClient({ alerts, monitors, changes, periods, initial }: Pr
     [alerts, period, periods, severities, picked, monitors, theme, changes],
   );
 
-  const save = (patch: Record<string, unknown>) => void fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {});
+  const save = (patch: Record<string, unknown>) => void apiFetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {});
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(digest.html);

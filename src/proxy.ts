@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { accessFor } from "@/lib/access";
+import { CSRF_COOKIE, csrfCookie, csrfProblem, newCsrfToken, validToken } from "@/lib/csrf";
 
 /**
  * Refreshes the Supabase session cookie on every request. Signed-out visitors go to /login, and a
@@ -8,9 +9,21 @@ import { accessFor } from "@/lib/access";
  * With no allow-list set, pages go to /access and the API answers 503. Public: /login, /access,
  * /auth/*, and /api/cron (it checks its own secret). Every handler checks again on its own.
  * Demo mode has no Supabase, so the request passes straight through.
+ * Every response sets the CSRF cookie when the browser has none. A request that changes state
+ * (anything but GET, HEAD, OPTIONS) to /api must be same-origin and carry the matching token. The
+ * route handlers check again.
  */
 export async function proxy(request: NextRequest) {
-  if (process.env.NEXT_PUBLIC_DEMO === "1") return NextResponse.next({ request });
+  const response = await gate(request);
+  if (!validToken(request.cookies.get(CSRF_COOKIE)?.value)) response.headers.append("Set-Cookie", csrfCookie(newCsrfToken()));
+  return response;
+}
+
+async function gate(request: NextRequest): Promise<NextResponse> {
+  if (process.env.NEXT_PUBLIC_DEMO === "1") {
+    const bad = request.nextUrl.pathname.startsWith("/api/") ? csrfProblem(request.method, request.headers) : null;
+    return bad ? NextResponse.json({ error: bad.error, code: bad.code }, { status: bad.status, headers: { "Cache-Control": "no-store" } }) : NextResponse.next({ request });
+  }
   const path = request.nextUrl.pathname;
   const isApi = path.startsWith("/api/");
   const open = path === "/login" || path === "/access" || path.startsWith("/auth/");
@@ -51,6 +64,8 @@ export async function proxy(request: NextRequest) {
     url.search = access === "setup_required" ? "?why=setup" : "?why=denied";
     return NextResponse.redirect(url);
   }
+  const bad = isApi ? csrfProblem(request.method, request.headers) : null;
+  if (bad) return deny(bad.status, bad.code, bad.error);
   return response;
 }
 

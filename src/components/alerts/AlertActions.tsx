@@ -8,10 +8,11 @@ import { Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { now } from "@/lib/clock";
 import type { AlertState, Severity } from "@/lib/types";
+import { apiFetch } from "@/lib/apiFetch";
 
 /** Sends a triage change for one or more alerts. Throws with the server's message on failure. */
 export async function patchAlerts(ids: string[], patch: Record<string, unknown>) {
-  const res = await fetch("/api/alerts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, patch }) });
+  const res = await apiFetch("/api/alerts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, patch }) });
   if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `Request failed (${res.status})`);
 }
 

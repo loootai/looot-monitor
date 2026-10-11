@@ -21,7 +21,7 @@ const input = z
   .partial();
 
 export async function PATCH(req: Request) {
-  return withSession(async ({ store }) => {
+  return withSession(req, async ({ store }) => {
     const parsed = input.safeParse(await body(req));
     if (!parsed.success) return fail(400, "Those settings are not valid.");
     return NextResponse.json({ settings: await store.saveSettings(parsed.data) });

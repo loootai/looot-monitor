@@ -13,6 +13,7 @@ import { usdPrecise } from "@/lib/money";
 import type { Quote } from "@/lib/quote";
 import type { RunOutcome } from "@/lib/runner";
 import type { Monitor } from "@/lib/types";
+import { apiFetch } from "@/lib/apiFetch";
 
 type Phase = { step: "quote" } | { step: "running" } | { step: "done"; outcome: RunOutcome } | { step: "error"; message: string };
 
@@ -38,7 +39,7 @@ function Body({ monitor, canRun, close }: { monitor: NonNullable<Parameters<type
 
   React.useEffect(() => {
     let live = true;
-    fetch("/api/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: monitor.kind, config: monitor.config, schedule: monitor.schedule }) })
+    apiFetch("/api/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: monitor.kind, config: monitor.config, schedule: monitor.schedule }) })
       .then(async (r) => {
         const data = await r.json();
         if (!live) return;
@@ -58,7 +59,7 @@ function Body({ monitor, canRun, close }: { monitor: NonNullable<Parameters<type
   const run = async () => {
     setPhase({ step: "running" });
     try {
-      const res = await fetch(`/api/monitors/${monitor.id}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmId, maxCostMicros: maxMicros }) });
+      const res = await apiFetch(`/api/monitors/${monitor.id}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmId, maxCostMicros: maxMicros }) });
       const data = (await res.json()) as { outcome?: RunOutcome; error?: string };
       if (!res.ok || !data.outcome) throw new Error(data.error ?? `The run failed (${res.status})`);
       setPhase({ step: "done", outcome: data.outcome });

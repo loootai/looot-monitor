@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { usdPrecise } from "@/lib/money";
 import type { Settings } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 export interface SourceRow {
   label: string;
@@ -71,7 +72,7 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
 
   const save = async (patch: Partial<Settings>, done = "Saved") => {
     try {
-      const res = await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+      const res = await apiFetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Could not save");
       toast({ text: done });
       router.refresh();
@@ -84,7 +85,7 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
   const testConnection = async () => {
     setTest({ state: "busy" });
     try {
-      const res = await fetch("/api/balance");
+      const res = await apiFetch("/api/balance");
       const data = (await res.json()) as { balanceUsd?: number | null; error?: string; code?: string; demo?: boolean };
       if (!res.ok) throw new Error(`${data.error ?? "Failed"}${data.code ? ` (${data.code})` : ""}`);
       setTest({ state: "ok", text: `${data.demo ? "Demo balance" : "Connected. Balance"} ${typeof data.balanceUsd === "number" ? `$${data.balanceUsd.toFixed(2)}` : "not reported"}` });
@@ -95,7 +96,7 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
   const runPreview = async () => {
     setPreview("Checking...");
     try {
-      const res = await fetch("/api/settings/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ escalationWords: s.escalationWords, priorityDomains: s.priorityDomains }) });
+      const res = await apiFetch("/api/settings/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ escalationWords: s.escalationWords, priorityDomains: s.priorityDomains }) });
       const d = (await res.json()) as { changed: number; checked: number; up: number; down: number };
       setPreview(d.changed === 0 ? `No change across ${d.checked} mention alerts from the last 30 days.` : `${d.changed} of ${d.checked} mention alerts from the last 30 days would change severity: ${d.up} up, ${d.down} lower.`);
     } catch {
@@ -121,7 +122,7 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
   const deleteData = async () => {
     setDeleting(false);
     try {
-      const res = await fetch("/api/account", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm }) });
+      const res = await apiFetch("/api/account", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm }) });
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Could not delete");
       toast({ text: "Your data was deleted" });
       router.push("/");

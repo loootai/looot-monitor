@@ -13,6 +13,7 @@ import { dateTime } from "@/lib/clock";
 import { usdPrecise } from "@/lib/money";
 import type { Monitor, Run } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 /** Run now, Pause or Resume, and Edit, in the monitor header. */
 export function MonitorActions({ monitor, canRun, label = "Run now" }: { monitor: Monitor; canRun: boolean; label?: string }) {
@@ -24,7 +25,7 @@ export function MonitorActions({ monitor, canRun, label = "Run now" }: { monitor
   const toggle = async () => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/monitors/${monitor.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: paused ? "active" : "paused" }) });
+      const res = await apiFetch(`/api/monitors/${monitor.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: paused ? "active" : "paused" }) });
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Could not change the monitor");
       toast({ text: paused ? "Monitor resumed" : "Monitor paused" });
       router.refresh();

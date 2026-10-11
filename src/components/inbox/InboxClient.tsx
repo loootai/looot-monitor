@@ -15,6 +15,7 @@ import { dayKey, dayLabel, now, relative, shortDate } from "@/lib/clock";
 import { chipOf } from "@/lib/sources";
 import type { Alert, AlertState, OwnerTag, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 export interface VolumeDay {
   day: string;
@@ -231,7 +232,7 @@ export function InboxClient({ alerts, state, counts, monitors, volume, selectedI
     if (!last) return;
     setLoadingOlder(true);
     try {
-      const res = await fetch(`/api/alerts?state=${state}&before=${encodeURIComponent(last.createdAt)}`);
+      const res = await apiFetch(`/api/alerts?state=${state}&before=${encodeURIComponent(last.createdAt)}`);
       const data = (await res.json()) as { alerts?: Alert[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not load older alerts");
       setOlder((o) => [...o, ...(data.alerts ?? [])]);

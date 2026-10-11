@@ -8,7 +8,7 @@ const input = z.object({ kind: z.enum(["mention", "serp", "page", "reviews"]), s
 
 /** Free. Returns what a monitor would cost per run and per month. Nothing is run. */
 export async function POST(req: Request) {
-  return withSession(async () => {
+  return withSession(req, async () => {
     const parsed = input.safeParse(await body(req));
     if (!parsed.success) return fail(400, "Send kind, schedule and config.");
     return NextResponse.json(await quoteFor(parsed.data.kind, parsed.data.config as MonitorConfig, parsed.data.schedule));

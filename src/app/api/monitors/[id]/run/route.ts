@@ -13,7 +13,7 @@ const input = z.object({ confirmId: z.string().min(6).max(80), maxCostMicros: z.
  * with the same id charges nothing. Limited to 10 paid calls a minute per user.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  return withSession(async ({ store }) => {
+  return withSession(req, async ({ store }) => {
     const parsed = input.safeParse(await body(req));
     if (!parsed.success) return fail(400, "Confirm the quote first.");
     const monitor = await store.getMonitor((await ctx.params).id);

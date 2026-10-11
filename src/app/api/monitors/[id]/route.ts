@@ -9,7 +9,7 @@ const quick = z.object({ status: z.enum(["active", "paused"]).optional(), monthl
 
 /** Edits a monitor. A body with `kind` is a full edit from the form; otherwise pause, resume or raise the cap. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  return withSession(async ({ store }) => {
+  return withSession(req, async ({ store }) => {
     const { id } = await ctx.params;
     const current = await store.getMonitor(id);
     if (!current) return fail(404, "This monitor was deleted.");
@@ -32,8 +32,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   });
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  return withSession(async ({ store }) => {
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return withSession(req, async ({ store }) => {
     await store.deleteMonitor((await ctx.params).id);
     return NextResponse.json({ ok: true });
   });

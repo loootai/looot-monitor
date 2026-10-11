@@ -8,7 +8,7 @@ const input = z.object({ escalationWords: z.array(z.string()).max(100), priority
 
 /** Free. Counts how many of the last 30 days of mention alerts would change severity under edited rules. */
 export async function POST(req: Request) {
-  return withSession(async ({ store }) => {
+  return withSession(req, async ({ store }) => {
     const parsed = input.safeParse(await body(req));
     if (!parsed.success) return fail(400, "Send the rules to preview.");
     const since = new Date(now().getTime() - 30 * 86_400_000).toISOString();
