@@ -87,6 +87,8 @@ For the web app, copy `.env.example` to `.env.local` (Next.js reads it) and foll
 | `NEXT_PUBLIC_SUPABASE_URL` | web app | Supabase project URL | Supabase, Project Settings, API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web app | Supabase anon key | Supabase, Project Settings, API |
 | `SUPABASE_SERVICE_ROLE_KEY` | for schedules | Server only. Bypasses row level security. Used by `/api/cron` alone | Supabase, Project Settings, API |
+| `LOOOT_MONITOR_ALLOWED_EMAILS` | web app, required | Comma separated list of emails that may use the workspace. Case-insensitive, exact match. With this and the next variable both empty the app shows a setup page and refuses all data, settings and paid runs | You choose |
+| `LOOOT_MONITOR_ALLOWED_DOMAINS` | no | Comma separated email domains that may use the workspace, for example `example.com`. Exact domain, subdomains do not match | You choose |
 | `CRON_SECRET` | for schedules | Any long random string. `/api/cron` answers 401 unless the request carries `Authorization: Bearer <CRON_SECRET>`. Vercel sends it | You make it up, for example `openssl rand -hex 32` |
 | `APP_URL` | no | Base URL that `npm run tick` calls. You can pass it as the first argument instead | Your app URL |
 | `NEXT_PUBLIC_DEMO` | no | `1` turns on demo mode | Set by `npm run demo` |
@@ -119,7 +121,9 @@ The app uses Supabase Auth (magic link and GitHub) and a Postgres database. Thes
    - `https://<your-app-domain>/auth/callback` for the deployed app
    Set the Site URL to your deployed app URL.
 4. Optional, for "Continue with GitHub", turn on the GitHub provider under Authentication, Sign In / Providers and enter the client id and secret of a GitHub OAuth app you create. Magic link works without it.
-5. Put `LOOOT_TOKEN` in `.env.local`, then `npm run dev` and open http://localhost:3000. Request a magic link and click it.
+5. Put your own email in `LOOOT_MONITOR_ALLOWED_EMAILS` in `.env.local` (comma separated for more than one, or use `LOOOT_MONITOR_ALLOWED_DOMAINS` for a whole domain). Without it the app signs you in and then shows a setup page.
+6. Turn off public sign-ups: in Supabase, Authentication, Sign In / Providers, switch off "Allow new users to sign up" and create your own user. A new Supabase project allows sign-ups by default, so anyone who finds the login page could create an account. The allow-list stops that account from reading data or spending, and turning sign-ups off stops the account from existing. Do both.
+7. Put `LOOOT_TOKEN` in `.env.local`, then `npm run dev` and open http://localhost:3000. Request a magic link and click it.
 
 ### Schedules
 
@@ -144,10 +148,12 @@ Without `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` and `LOOOT_TOKEN` the route a
    | `NEXT_PUBLIC_SUPABASE_URL` | your Supabase project URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | your Supabase anon key |
    | `LOOOT_TOKEN` | your looot agent token |
+   | `LOOOT_MONITOR_ALLOWED_EMAILS` | your email, comma separated for more than one (or set `LOOOT_MONITOR_ALLOWED_DOMAINS`) |
    | `CRON_SECRET` | a long random string, for scheduled checks |
    | `SUPABASE_SERVICE_ROLE_KEY` | your service role key, for scheduled checks |
 
-4. Deploy, then add `https://<your-vercel-domain>/auth/callback` to the Supabase redirect URLs and set the Site URL to the same domain. `vercel.json` registers the hourly cron.
+4. Turn off public sign-ups in Supabase (Authentication, Sign In / Providers) or rely on the allow-list. See [Securing a deployment](#securing-a-deployment).
+5. Deploy, then add `https://<your-vercel-domain>/auth/callback` to the Supabase redirect URLs and set the Site URL to the same domain. `vercel.json` registers the hourly cron.
 
 ### The watchlist on GitHub Actions
 
@@ -264,6 +270,19 @@ Money is stored as integer micro-dollars. `LOOOT_TOKEN` is read only in `src/lib
 Seven tables in `supabase/migrations`: `settings`, `monitors`, `monitor_sources`, `runs`, `snapshots`, `serp_results`, `alerts`. Every table has an `owner_id` that defaults to `auth.uid()`, row level security enabled and forced, and select, insert, update and delete policies on `owner_id = auth.uid()`. A trigger rejects a child row whose parent has another owner.
 
 `npm run test:rls` applies the migration to a throwaway local Postgres (`initdb`, `pg_ctl` and `psql` on PATH, no containers) and checks that a second user reads, updates and deletes zero rows of the first in all seven tables. It skips with a note when PostgreSQL is not installed.
+
+## Securing a deployment
+
+Versions before 0.1.4 let any signed-in Supabase user use the workspace. A new Supabase project allows open sign-ups, so a stranger could create an account, spend your `LOOOT_TOKEN`, read data and change settings. From 0.1.4 the server checks an owner allow-list on every page, API route and server-side read.
+
+- **Allow-list.** Set `LOOOT_MONITOR_ALLOWED_EMAILS` (comma separated, case-insensitive, exact match) and optionally `LOOOT_MONITOR_ALLOWED_DOMAINS`. A signed-in user who is not on the list sees "Not authorised for this workspace" and gets 403 from the API.
+- **No list, no access.** Outside demo mode with neither variable set, nobody is let in. Pages go to a setup page and the API answers 503 `setup_required`. The first user to sign in never becomes an admin by default.
+- **Turn off public sign-ups** in your Supabase project (Authentication, Sign In / Providers). The allow-list is the lock. This is the door you do not need open.
+- **Public routes.** `/login`, `/access`, `/auth/callback` and static files. `/api/cron` is also reachable but answers 401 unless the request carries `Authorization: Bearer <CRON_SECRET>`, compared in constant time. Everything else is closed. A route you add later is closed too, and `npm test` fails if it is not.
+- **Paid runs.** The cap is the monitor's saved max cost per run, the monthly cap and the workspace cap. A request can lower the max for one run but never raise it. Every run is checked against the live price first. The idempotency key is `man:<monitor>:<source>:<confirmId>`, so a retried request charges once. Each user is limited to 10 paid runs a minute (kept in memory, so per server instance).
+- **One token, several users.** `LOOOT_TOKEN` belongs to the operator. Every allowed user spends from it, each inside their own workspace cap. Row level security keeps their rows apart (`npm run test:rls`). Allow only people who may spend your balance.
+- **Sign-in redirects.** `/auth/callback` ignores `next` and `redirectTo` and always lands on `/`.
+- **Stronger option.** Put the deployment behind a VPN or an identity-aware proxy (Cloudflare Access, Tailscale, Vercel Deployment Protection) so strangers cannot reach the login page at all.
 
 ## Troubleshooting
 

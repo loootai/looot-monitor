@@ -1,16 +1,37 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { getSession, type Session } from "./store";
+import { makeRateLimit } from "./access";
+import { resolveSession, type Session } from "./store";
 
 /** JSON error answer in one shape: { error, code?, fields? }. */
 export function fail(status: number, error: string, extra: Record<string, unknown> = {}) {
   return NextResponse.json({ error, ...extra }, { status });
 }
 
-/** Runs a route handler for the signed-in user, or answers 401. Thrown errors become a 500 with the message. */
-export async function withSession(handler: (s: Session) => Promise<Response>): Promise<Response> {
-  const s = await getSession();
-  if (!s) return fail(401, "Sign in first.", { code: "unauthorized" });
+const spendLimit = makeRateLimit(10, 60_000);
+
+/** Counts one paid call for this user. true when they are past 10 in the last minute. */
+export function overSpendLimit(s: Session): boolean {
+  return !spendLimit(s.user.id ?? s.user.email);
+}
+
+/** The 429 answer for a user past the spending limit. */
+export function tooMany() {
+  return fail(429, "Too many paid runs in a minute. Wait and try again.", { code: "rate_limited" });
+}
+
+/**
+ * Runs a route handler for the signed-in user on the owner allow-list. Answers 401 when nobody is
+ * signed in, 403 when the user is not on the list, 503 when no list is set. Thrown errors become a 500.
+ * With `spends: true` it also limits the user to 10 paid calls a minute and answers 429 past that.
+ */
+export async function withSession(handler: (s: Session) => Promise<Response>, opts: { spends?: boolean } = {}): Promise<Response> {
+  const r = await resolveSession();
+  if (r.state === "signed_out") return fail(401, "Sign in first.", { code: "unauthorized" });
+  if (r.state === "not_allowed") return fail(403, "Not authorised for this workspace.", { code: "forbidden" });
+  if (r.state === "setup_required") return fail(503, "Set LOOOT_MONITOR_ALLOWED_EMAILS (or LOOOT_MONITOR_ALLOWED_DOMAINS) on the server first.", { code: "setup_required" });
+  const s = r.session;
+  if (opts.spends && overSpendLimit(s)) return tooMany();
   try {
     return await handler(s);
   } catch (e) {

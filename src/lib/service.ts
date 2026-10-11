@@ -50,14 +50,13 @@ export function canRun(): boolean {
 }
 
 /**
- * Runs a monitor once, now, for the signed-in user. The caller has shown the quote; maxCostMicros
- * is what the user confirmed and becomes the monitor's max when it differs.
+ * Runs a monitor once, now, for the signed-in user. The cap is the monitor row's. maxCostMicros
+ * can only lower it for this one run and is never saved; asking for more changes nothing.
  */
 export async function runNow(store: Store, monitor: Monitor, confirmId: string, maxCostMicros?: number): Promise<RunOutcome | ServiceError> {
   if (!canRun()) return { ok: false, status: 409, error: "LOOOT_TOKEN is not set on the server. Add it, then run again." };
   const prices = await fetchPrices(undefined, { demo: IS_DEMO });
-  let m = monitor;
-  if (maxCostMicros && maxCostMicros !== monitor.maxCostPerRunMicros) m = (await store.updateMonitor(monitor.id, { maxCostPerRunMicros: maxCostMicros, confirmedAt: now().toISOString() })) ?? monitor;
+  const m = maxCostMicros && maxCostMicros < monitor.maxCostPerRunMicros ? { ...monitor, maxCostPerRunMicros: maxCostMicros } : monitor;
   const looot = IS_DEMO ? fixtureRunner(store, m.id) : loootFromEnv();
   return runMonitor({ store, looot, prices: prices.prices, unpriced: prices.unread, now: now(), demo: IS_DEMO }, m, { trigger: "manual", confirmId });
 }

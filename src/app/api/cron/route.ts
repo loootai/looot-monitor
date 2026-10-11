@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { loootFromEnv } from "@/lib/looot";
 import { fetchPrices } from "@/lib/prices";
@@ -5,6 +6,14 @@ import { runMonitor } from "@/lib/runner";
 import { SupabaseStore } from "@/lib/store/supabase";
 import { adminSupabase } from "@/lib/supabase/server";
 import type { Monitor } from "@/lib/types";
+
+/** Compares two strings in constant time. Different lengths are unequal without comparing. */
+function sameSecret(given: string | null, expected: string): boolean {
+  if (given === null) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export const maxDuration = 300;
 const MAX_PER_TICK = 25;
@@ -17,7 +26,7 @@ const MAX_PER_TICK = 25;
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!secret || !sameSecret(req.headers.get("authorization"), `Bearer ${secret}`)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (process.env.NEXT_PUBLIC_DEMO === "1") return NextResponse.json({ error: "The demo has no scheduler." }, { status: 501 });
   const db = adminSupabase();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY is not set. Scheduled checks are off." }, { status: 501 });

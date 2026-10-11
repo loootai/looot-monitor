@@ -8,7 +8,9 @@ const input = z.object({ confirmId: z.string().min(6).max(80), maxCostMicros: z.
 
 /**
  * Paid. Runs one monitor now. The body carries the id made when the quote was shown, which is the
- * idempotency key, and the max cost the user confirmed. A second post with the same id charges nothing.
+ * idempotency key (scoped to the monitor and source), and may lower the max cost for this run. The
+ * cap is the monitor row's: the body can never raise it or change it for later runs. A second post
+ * with the same id charges nothing. Limited to 10 paid calls a minute per user.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return withSession(async ({ store }) => {
@@ -19,5 +21,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const out = await runNow(store, monitor, parsed.data.confirmId, parsed.data.maxCostMicros);
     if ("ok" in out) return fail(out.status, out.error, { code: "no_token" });
     return NextResponse.json({ outcome: out });
-  });
+  }, { spends: true });
 }
