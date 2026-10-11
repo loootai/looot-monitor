@@ -2,6 +2,21 @@
 
 Built from the GitHub release notes. Each version links to its release page.
 
+## 0.1.6 (2026-10-11)
+
+Spend limits that hold under concurrency. Before this version the budget check read the month's spend and the run wrote its cost afterwards, so runs that started together on different instances could each pass and together pass the cap.
+
+- New daily budget (`settings.daily_budget_micros`, default $1) next to the monthly workspace budget (`workspace_cap_micros`, default $3). Only the owner's Settings call changes them. A run request cannot.
+- Atomic reservation. Before a paid call the app quotes the price, checks the per-run cap, then calls `reserve_budget`, which locks the owner's settings row and reserves the price if spent + reserved + price fits the daily budget, the monthly budget and the monitor's monthly cap. All calls of a run are reserved together or not at all.
+- A completed call settles to its real cost. A failed or refused call releases the reservation. A pending call keeps it, is not written as failed at $0 and does not give budget back early.
+- Reservations older than 15 minutes are reconciled against `GET /v1/runs/{id}` when a run next starts. A run that is still pending, or cannot be fetched, stays reserved for 24 hours, then it is released.
+- The sidebar spend panel and the Spend page show used, held and left for today and the month, and say so when the budget is reached. The refusal names the period and the numbers.
+- The per-run cap is unchanged.
+
+Migration: apply `supabase/migrations/20261011000000_period_budget.sql` before you deploy. It adds a column and a table and drops nothing. Without it paid runs fail before any call. The README setup step lists both migration files.
+
+Upgrade note: the looot token balance is still the final limit. Use a dedicated token and fund it with what you are willing to spend.
+
 ## 0.1.5 (2026-10-11)
 
 CSRF protection for every state-changing API route. Versions 0.1.4 and earlier checked who you are but not where a request came from. A page on another site could make a signed-in user's browser send a PATCH, POST or DELETE to a deployed copy (change settings, pause monitors, start a paid run, delete the account data). Upgrade if you run a deployed copy.

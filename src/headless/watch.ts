@@ -162,7 +162,8 @@ export async function runWatch(deps: WatchDeps): Promise<{ state: WatchState; re
     };
   });
   const store = new MemoryStore({
-    settings: { ...DEFAULT_SETTINGS, workspaceCapMicros: list.monthlyCapMicros },
+    // A watchlist has one monthly cap and no daily budget, so the daily budget never binds.
+    settings: { ...DEFAULT_SETTINGS, workspaceCapMicros: list.monthlyCapMicros, dailyBudgetMicros: list.monthlyCapMicros },
     monitors,
     // Runs of a page that left the list stay: their cost still counts against this month's cap.
     runs: prev.runs,

@@ -12,7 +12,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { store, user } = await requireSession();
   const at = now();
-  const [monitors, counts, settings, monthMicros] = await Promise.all([store.listMonitors(), store.alertCounts(), store.getSettings(), store.spentSince(monthStart(at).toISOString())]);
+  const [monitors, counts, settings, monthMicros, budget] = await Promise.all([store.listMonitors(), store.alertCounts(), store.getSettings(), store.spentSince(monthStart(at).toISOString()), store.budgetStatus(at)]);
   const data: ShellData = {
     demo: IS_DEMO,
     user,
@@ -21,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     unreadCount: counts.unread,
     monthMicros,
     capMicros: settings.workspaceCapMicros,
+    budget,
     monthLabel: MONTHS[at.getUTCMonth()],
   };
   return (

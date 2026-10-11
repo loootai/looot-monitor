@@ -1,3 +1,5 @@
+import { RESERVATION_HARD_SECONDS, RESERVATION_SOFT_SECONDS, overBudget, windowOf, type BudgetStatus, type Reservation, type ReserveRequest, type ReserveResult } from "../budget";
+import { dayStart, monthStart } from "../schedule";
 import { buildSeed, DEMO_OWNER, type Seed } from "@/demo/seed";
 import type { Alert, Monitor, Run, Settings, Snapshot } from "../types";
 import type { AlertCounts, AlertPatch, AlertQuery, NewMonitor, RunQuery, SerpResult, Store } from "./types";
@@ -10,6 +12,7 @@ const desc = <T>(key: (t: T) => string) => (a: T, b: T) => (key(a) < key(b) ? 1 
 export class MemoryStore implements Store {
   readonly ownerId = DEMO_OWNER;
   #d: Seed;
+  #res: Reservation[] = [];
 
   constructor(seed?: Seed) {
     this.#d = seed ?? { settings: { ...buildEmptySettings() }, monitors: [], runs: [], alerts: [], snapshots: [], serp: [] };
@@ -129,6 +132,61 @@ export class MemoryStore implements Store {
     return n;
   }
 
+  #numbers(at: Date, monitorId?: string) {
+    const s = this.#d.settings;
+    const day = dayStart(at).toISOString();
+    const month = monthStart(at).toISOString();
+    let spentDay = 0;
+    let spentMonth = 0;
+    let spentMonitor = 0;
+    for (const r of this.#d.runs) {
+      if (r.startedAt >= day) spentDay += r.actualCostMicros;
+      if (r.startedAt >= month) {
+        spentMonth += r.actualCostMicros;
+        if (r.monitorId === monitorId) spentMonitor += r.actualCostMicros;
+      }
+    }
+    const held = this.#res.filter((x) => x.state === "reserved");
+    return {
+      dailyBudgetMicros: s.dailyBudgetMicros,
+      monthlyBudgetMicros: s.workspaceCapMicros,
+      spentDayMicros: spentDay,
+      spentMonthMicros: spentMonth,
+      spentMonitorMonthMicros: spentMonitor,
+      reservedMicros: held.reduce((n, x) => n + x.amountMicros, 0),
+      reservedMonitorMicros: held.filter((x) => x.monitorId === monitorId).reduce((n, x) => n + x.amountMicros, 0),
+    };
+  }
+  async budgetStatus(at: Date): Promise<BudgetStatus> {
+    const n = this.#numbers(at);
+    return { daily: windowOf(n.dailyBudgetMicros, n.spentDayMicros, n.reservedMicros), monthly: windowOf(n.monthlyBudgetMicros, n.spentMonthMicros, n.reservedMicros) };
+  }
+  // No await inside the next four methods, so the check and the write cannot interleave with another caller.
+  async reserveBudget(req: ReserveRequest): Promise<ReserveResult> {
+    const monitor = this.#d.monitors.find((m) => m.id === req.monitorId);
+    const n = this.#numbers(req.now, req.monitorId);
+    const budget: BudgetStatus = { daily: windowOf(n.dailyBudgetMicros, n.spentDayMicros, n.reservedMicros), monthly: windowOf(n.monthlyBudgetMicros, n.spentMonthMicros, n.reservedMicros) };
+    if (req.items.some((i) => this.#res.some((x) => x.key === i.key))) return { ok: false, reason: "duplicate" };
+    const scope = overBudget({ ...n, monitorCapMicros: monitor?.monthlyCapMicros ?? 0, totalMicros: req.items.reduce((t, i) => t + i.amountMicros, 0) });
+    if (scope) return { ok: false, reason: "budget", scope, budget };
+    for (const i of req.items) {
+      this.#res.push({ key: i.key, monitorId: req.monitorId, source: i.source, endpointId: i.endpointId, trigger: req.trigger, slot: req.slot, amountMicros: i.amountMicros, state: "reserved", loootRunId: null, createdAt: req.now.toISOString(), expiresAt: new Date(req.now.getTime() + RESERVATION_SOFT_SECONDS * 1000).toISOString(), hardExpiresAt: new Date(req.now.getTime() + RESERVATION_HARD_SECONDS * 1000).toISOString() });
+    }
+    return { ok: true, budget };
+  }
+  async settleReservation(key: string): Promise<void> {
+    for (const x of this.#res) if (x.key === key && x.state === "reserved") x.state = "settled";
+  }
+  async releaseReservation(key: string): Promise<void> {
+    for (const x of this.#res) if (x.key === key && x.state === "reserved") x.state = "released";
+  }
+  async holdReservation(key: string, loootRunId: string): Promise<void> {
+    for (const x of this.#res) if (x.key === key && x.state === "reserved") x.loootRunId = loootRunId;
+  }
+  async listExpiredReservations(at: Date): Promise<Reservation[]> {
+    return this.#res.filter((x) => x.state === "reserved" && x.expiresAt <= at.toISOString()).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((x) => ({ ...x }));
+  }
+
   async listSnapshots(monitorId: string): Promise<Snapshot[]> {
     return this.#d.snapshots.filter((s) => s.monitorId === monitorId).sort(desc((s) => s.takenAt)).map((s) => ({ ...s }));
   }
@@ -151,12 +209,14 @@ export class MemoryStore implements Store {
 
   async deleteAllData(): Promise<void> {
     this.#d = { settings: buildEmptySettings(), monitors: [], runs: [], alerts: [], snapshots: [], serp: [] };
+    this.#res = [];
   }
 }
 
 function buildEmptySettings(): Settings {
   return {
     workspaceCapMicros: 3_000_000,
+    dailyBudgetMicros: 1_000_000,
     defaultCapMicros: 250_000,
     escalationWords: ["outage", "breach", "lawsuit", "scam", "refund", "down", "leak"],
     priorityDomains: [],

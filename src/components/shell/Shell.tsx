@@ -9,6 +9,7 @@ import { Kbd } from "@/components/ui/misc";
 import { Dialog, DialogContent, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, TooltipProvider, Tip } from "@/components/ui/overlay";
 import { ToastProvider } from "@/components/ui/toast";
 import { usd } from "@/lib/money";
+import type { BudgetStatus } from "@/lib/budget";
 import type { MonitorStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,8 @@ export interface ShellData {
   monthMicros: number;
   capMicros: number;
   monthLabel: string;
+  /** Used, held for runs in progress, and left, for today and this month. */
+  budget: BudgetStatus;
 }
 
 /** Sidebar nav. The Monitors item carries the monitor list with unread counts. */
@@ -143,7 +146,18 @@ export function Shell({ data, children }: { data: ShellData; children: React.Rea
           githubHref="https://github.com/loootai/looot-monitor"
           nav={navFor(data)}
           demoLabel={data.demo ? "Demo data, fixed clock, no looot call" : undefined}
-          spend={{ label: `${data.monthLabel} spend, cap ${usd(data.capMicros)}`, spent: usd(data.monthMicros), ratio: data.capMicros > 0 ? data.monthMicros / data.capMicros : 0 }}
+          spend={{
+            label: `${data.monthLabel} spend, budget ${usd(data.capMicros)}`,
+            spent: usd(data.monthMicros),
+            ratio: data.capMicros > 0 ? (data.budget.monthly.spentMicros + data.budget.monthly.reservedMicros) / data.capMicros : 0,
+            lines: [
+              { label: "Month held", value: usd(data.budget.monthly.reservedMicros) },
+              { label: "Month left", value: usd(data.budget.monthly.remainingMicros) },
+              { label: `Today of ${usd(data.budget.daily.budgetMicros)}`, value: `${usd(data.budget.daily.spentMicros)} used` },
+              { label: "Today held", value: usd(data.budget.daily.reservedMicros) },
+              { label: "Today left", value: usd(data.budget.daily.remainingMicros) },
+            ],
+          }}
           primaryAction={{ href: "/monitors/new", label: "New monitor" }}
         >
           <div className="flex h-[calc(100dvh-56px)] flex-col lg:h-[calc(100dvh-52px)]">

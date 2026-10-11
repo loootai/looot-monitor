@@ -46,12 +46,11 @@ export default async function SpendPage({ searchParams }: { searchParams: Promis
   const at = now();
   const days = q.range === "7" ? 7 : q.range === "90" ? 90 : 30;
   const since = new Date(Math.min(at.getTime() - days * 86_400_000, monthStart(at).getTime())).toISOString();
-  const [runs, monitors, alerts, settings, prices] = await Promise.all([forced === "empty" ? Promise.resolve([]) : store.listRuns({ since }), store.listMonitors(), store.listAlerts({ since, limit: 5000 }), store.getSettings(), fetchPrices(undefined, { demo: IS_DEMO })]);
+  const [runs, monitors, alerts, prices, budget] = await Promise.all([forced === "empty" ? Promise.resolve([]) : store.listRuns({ since }), store.listMonitors(), store.listAlerts({ since, limit: 5000 }), fetchPrices(undefined, { demo: IS_DEMO }), store.budgetStatus(at)]);
   if (runs.length === 0) return <Empty title="No paid calls yet" note="Your first run will show here, with what it cost and what it found." />;
 
   const perRunMicros = Object.fromEntries(monitors.map((m) => [m.id, buildQuote(m.kind, m.config, m.schedule, prices.prices, prices.pricesAsOf).perRunMicros]));
   const s = summarizeSpend({ runs, monitors, alerts, now: at, days, prices: prices.prices, perRunMicros });
-  const left = settings.workspaceCapMicros - s.monthMicros;
   const maxDay = Math.max(...s.daily.map((d) => d.total), 1);
   const data: BarDatum[] = s.daily.map((d) => ({ key: d.day, label: dayLabel(d.day, at), segs: KINDS.map((k) => ({ name: KIND_LABEL[k], value: d.byKind[k], color: KIND_COLOR[k], text: usdPrecise(d.byKind[k]) })), notes: [`${usd(d.total)} total · ${d.calls} calls${d.failed ? `, ${d.failed} failed` : ""}`] }));
   const names = Object.fromEntries(monitors.map((m) => [m.id, m.name]));
@@ -61,9 +60,39 @@ export default async function SpendPage({ searchParams }: { searchParams: Promis
       <dl className="grid grid-cols-2 border-b border-line md:grid-cols-4">
         <Stat label={`Spent in ${shortDate(monthStart(at)).split(" ")[0]}`} value={usd(s.monthMicros)} sub={`since ${shortDate(monthStart(at))}`} />
         <Stat label="Projected month end" value={usd(s.projectedMicros)} sub={`resets ${shortDate(nextMonthStart(at))}`} />
-        <Stat label="Workspace cap" value={usd(settings.workspaceCapMicros)} sub={<span className={cn(left < 0 && "text-high")}>{usd(Math.max(0, left))} left</span>} />
+        <Stat label="Monthly budget" value={usd(budget.monthly.budgetMicros)} sub={<span className={cn(budget.monthly.remainingMicros === 0 && "text-high")}>{usd(budget.monthly.remainingMicros)} left</span>} />
         <Stat label="Cost per alert" value={s.costPerAlertMicros === null ? "none yet" : usdPrecise(s.costPerAlertMicros)} sub={`${s.alertsFound} alerts in ${days} days`} />
       </dl>
+
+      <section aria-labelledby="budget-h" className="border-b border-line px-4 py-4 md:px-6">
+        <h2 id="budget-h" className="mb-1 text-12 font-medium">
+          Budget <span className="font-normal text-mute">Held is the quoted price of runs still in progress. It counts against the budget until the run settles or fails.</span>
+        </h2>
+        {budget.daily.remainingMicros === 0 || budget.monthly.remainingMicros === 0 ? (
+          <p role="status" className="mb-2 text-12 text-high">
+            The {budget.daily.remainingMicros === 0 ? "daily" : "monthly"} budget is reached. New runs are refused and make no call. The owner can raise it in Settings.
+          </p>
+        ) : null}
+        <dl className="grid gap-3 md:grid-cols-2">
+          {(
+            [
+              ["Today (UTC)", budget.daily],
+              [`This month`, budget.monthly],
+            ] as const
+          ).map(([label, w]) => (
+            <div key={label}>
+              <dt className="text-11 text-mute">{label}</dt>
+              <dd className="num mt-0.5 flex flex-wrap gap-x-4 text-13">
+                <span>{usd(w.spentMicros)} used</span>
+                <span>{usd(w.reservedMicros)} held</span>
+                <span className={cn(w.remainingMicros === 0 && "text-high")}>{usd(w.remainingMicros)} left</span>
+                <span className="text-mute">of {usd(w.budgetMicros)}</span>
+              </dd>
+              <CapBar spent={w.spentMicros + w.reservedMicros} cap={w.budgetMicros} className="mt-1.5 w-full" />
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <section aria-labelledby="chart-h" className="border-b border-line px-4 py-4 md:px-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

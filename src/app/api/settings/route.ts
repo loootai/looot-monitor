@@ -6,6 +6,7 @@ const chips = z.array(z.string().trim().min(1).max(120)).max(100);
 const input = z
   .object({
     workspaceCapMicros: z.number().int().min(0),
+    dailyBudgetMicros: z.number().int().min(0),
     defaultCapMicros: z.number().int().min(0),
     escalationWords: chips,
     priorityDomains: chips,

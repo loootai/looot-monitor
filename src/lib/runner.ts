@@ -1,11 +1,12 @@
-import { checkGuards, type GuardResult } from "./budget";
+import { budgetRefusal, checkGuards, type GuardResult } from "./budget";
 import { dedupe } from "./dedupe";
 import { toMicros, usd, usdPrecise } from "./money";
 import { PARSERS, parsePage, parseScreenshot } from "./parse";
 import { contentHash, diffPages, normalize, pageTitle, watchHits } from "./pageDiff";
 import { parseQuery, passesExclusions } from "./query";
 import type { PriceMap } from "./quote";
-import { manualKey, monthStart, nextMonthStart, nextRunAfter, scheduledKey, slotFor } from "./schedule";
+import { isTerminal, reconcileReservations, type RunReader } from "./reservations";
+import { manualKey, monthStart, nextDayStart, nextMonthStart, nextRunAfter, scheduledKey, slotFor } from "./schedule";
 import { diffSerp } from "./serpDiff";
 import { mentionSeverity, pageSeverity, reviewSeverity, serpSeverity, systemSeverity } from "./severity";
 import { SOURCES, endpointFor, inputFor, sourcesFor } from "./sources";
@@ -14,7 +15,7 @@ import type { Alert, Item, Monitor, Run, RunStatus, RunTrigger, SerpRow, Setting
 import { shortDate } from "./clock";
 
 /** The one looot call the runner makes. LoootClient implements it; tests and the demo pass their own. */
-export interface Runner {
+export interface Runner extends RunReader {
   runAndWait(endpointId: string, input: Record<string, unknown>, idempotencyKey: string): Promise<{ runId: string; status: string; result?: unknown; actualCost?: number | string | null; error?: { code?: string; message?: string } | null }>;
 }
 
@@ -33,7 +34,8 @@ export interface RunOutcome {
   status: "ran" | "blocked_price" | "blocked_budget" | "duplicate";
   costMicros: number;
   newAlerts: number;
-  calls: { source: SourceId; status: RunStatus; costMicros: number; newItems: number; errorCode: string | null }[];
+  /** "pending" is a call looot accepted but has not finished. Its reservation stays held. */
+  calls: { source: SourceId; status: RunStatus | "pending"; costMicros: number; newItems: number; errorCode: string | null }[];
   message?: string;
 }
 
@@ -49,8 +51,11 @@ function systemAlert(monitor: Monitor, at: Date, fingerprint: string, title: str
 }
 
 /**
- * Runs one monitor once. Order: price guard, budget guard, then one looot call per source, then
- * parse, compare with what was seen and write alerts. A refused run makes no looot call.
+ * Runs one monitor once. Order: quote, per-run cap, period budget reservation, then one looot call
+ * per source, then parse, compare with what was seen and write alerts. A refused run makes no looot
+ * call. The reservation holds the quoted price of every call against the daily and monthly budget in
+ * one atomic step. It settles to the real cost when a call completes, is released when a call fails,
+ * and stays held while a call is pending.
  */
 export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigger: RunTrigger; confirmId?: string }): Promise<RunOutcome> {
   const { store, looot, prices, now } = deps;
@@ -59,6 +64,10 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
   const keyFor = (source: string) => (opts.trigger === "manual" ? manualKey(monitor.id, source, opts.confirmId ?? slot.toISOString()) : scheduledKey(monitor.id, source, slot));
   const sources = sourcesFor(monitor.kind, monitor.config);
   const withShot = monitor.kind === "page" && monitor.config.screenshotOnChange === true;
+  const spends = !deps.demo;
+
+  // Reservations from an earlier crash or a run that stayed pending are resolved first.
+  if (spends) await reconcileReservations({ store, looot, now });
 
   if (await store.hasRun(keyFor(sources[0]))) return { status: "duplicate", costMicros: 0, newAlerts: 0, calls: [], message: "This slot already ran." };
 
@@ -76,7 +85,20 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
     workspaceCapMicros: settings.workspaceCapMicros,
   });
   // A price nobody could read is not a price the user confirmed. Refuse before any call.
-  const guard: GuardResult = unread.length > 0 ? { ok: false, status: "blocked_price", scope: "price", message: `The live price of ${unread.join(", ")} could not be read. No call was made.` } : checked;
+  let guard: GuardResult = unread.length > 0 ? { ok: false, status: "blocked_price", scope: "price", message: `The live price of ${unread.join(", ")} could not be read. No call was made.` } : checked;
+
+  // Hold the quoted price of every call, all or none, in one atomic step. Two runs that start together
+  // cannot both pass. The screenshot is held too and handed back if the page did not change.
+  const shotKey = keyFor("screenshot");
+  if (guard.ok && spends) {
+    const items = [
+      ...sources.map((s) => ({ key: keyFor(s), source: s, endpointId: endpointFor(s, monitor.config), amountMicros: priceOf(s) })),
+      ...(withShot ? [{ key: shotKey, source: "screenshot" as SourceId, endpointId: SOURCES.screenshot.endpointId, amountMicros: prices[SOURCES.screenshot.endpointId] ?? 0 }] : []),
+    ];
+    const held = await store.reserveBudget({ monitorId: monitor.id, items, trigger: opts.trigger, slot: slot.toISOString(), now });
+    if (!held.ok && held.reason === "duplicate") return { status: "duplicate", costMicros: 0, newAlerts: 0, calls: [], message: "This slot already ran or is still in progress." };
+    if (!held.ok) guard = { ok: false, status: "blocked_budget", scope: held.scope === "monthly" ? "workspace" : held.scope, message: budgetRefusal(held.scope, held.budget, items.reduce((n, i) => n + i.amountMicros, 0)) };
+  }
 
   const baseRun = (source: SourceId): Omit<Run, "id" | "ownerId" | "status"> => ({
     monitorId: monitor.id,
@@ -101,7 +123,9 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
     const alert =
       guard.status === "blocked_price"
         ? systemAlert(monitor, now, `price:${slot.toISOString()}`, unread.length > 0 ? `${monitor.name} was not run: the live price could not be read` : `${monitor.name} was not run: the price is above your max`, unread.length > 0 ? "Live price could not be read" : `Price ${usdPrecise(livePriceMicros)} is above the confirmed max ${usdPrecise(monitor.maxCostPerRunMicros)}`)
-        : guard.scope === "monitor"
+        : guard.scope === "daily"
+          ? systemAlert(monitor, now, `daily-budget:${now.toISOString().slice(0, 10)}`, `The daily budget of ${usd(settings.dailyBudgetMicros)} was reached. ${monitor.name} was not run. Runs resume ${shortDate(nextDayStart(now))}.`, "Daily budget reached")
+          : guard.scope === "monitor"
           ? systemAlert(monitor, now, `budget:${month.slice(0, 7)}`, `${monitor.name} reached its ${usd(monitor.monthlyCapMicros)} cap. Paused until ${shortDate(reset)}.`, "Monthly cap reached")
           : systemAlert(monitor, now, `workspace-budget:${month.slice(0, 7)}`, `The workspace reached its ${usd(settings.workspaceCapMicros)} cap. ${monitor.name} was not run.`, "Workspace cap reached");
     const written = await store.insertAlerts([alert]);
@@ -118,10 +142,23 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
   const firstRun = priorRuns.length === 0;
   let lastError: string | null = null;
 
+  const called = new Set<string>();
+  /** The run row holds the real cost, or the call failed. Settle or release its reservation. */
+  const finish = async (row: Omit<Run, "id" | "ownerId">) => {
+    if (!spends) return;
+    if (row.status === "completed") await store.settleReservation(row.idempotencyKey, now);
+    else await store.releaseReservation(row.idempotencyKey, now);
+  };
+
   const call = async (source: SourceId) => {
     const row = baseRun(source);
+    called.add(row.idempotencyKey);
     try {
       const run = await looot.runAndWait(row.endpointId, inputFor(source, monitor.config), row.idempotencyKey);
+      // Remember the looot run id on the reservation at once, so a crash after this point can still be reconciled.
+      if (spends && run.runId) await store.holdReservation(row.idempotencyKey, run.runId);
+      // A run looot accepted but has not finished keeps its reservation and is not written as failed.
+      if (spends && !isTerminal(run.status)) return { row: { ...row, loootRunId: run.runId ?? null, status: "failed" as RunStatus /* placeholder, a pending call is never stored */ }, result: undefined, ok: false, pending: true };
       const ok = run.status === "completed";
       return {
         row: {
@@ -134,22 +171,28 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
         },
         result: ok ? run.result : undefined,
         ok,
+        pending: false,
       };
     } catch (e) {
       const err = e as { code?: string; message?: string };
-      return { row: { ...row, status: "failed" as RunStatus, errorCode: err.code ?? "request_failed", errorMessage: err.message ?? "The looot request failed" }, result: undefined, ok: false };
+      return { row: { ...row, status: "failed" as RunStatus, errorCode: err.code ?? "request_failed", errorMessage: err.message ?? "The looot request failed" }, result: undefined, ok: false, pending: false };
     }
   };
 
   for (const source of sources) {
-    const { row, result, ok } = await call(source);
+    const { row, result, ok, pending } = await call(source);
+    if (pending) {
+      outcome.calls.push({ source, status: "pending", costMicros: 0, newItems: 0, errorCode: null });
+      continue;
+    }
     let alerts: NewAlert[] = [];
     if (ok) {
-      if (source === "page") alerts = await handlePage(deps, monitor, result, settings, async () => (withShot ? call("screenshot") : null), outcome);
+      if (source === "page") alerts = await handlePage(deps, monitor, result, settings, async () => (withShot ? call("screenshot") : null), outcome, finish);
       else if (source === "google") alerts = await handleSerp(deps, monitor, result, settings);
       else alerts = handleList(source, monitor, result, seen, settings, firstRun, now);
     } else lastError = row.errorCode;
     const stored = await store.insertRun({ ...row, newItems: alerts.length });
+    await finish(row);
     if (!stored) {
       outcome.calls.push({ source, status: row.status, costMicros: 0, newItems: 0, errorCode: "duplicate" });
       continue;
@@ -160,6 +203,9 @@ export async function runMonitor(deps: RunDeps, monitor: Monitor, opts: { trigge
     outcome.newAlerts += written.length;
     outcome.calls.push({ source, status: row.status, costMicros: row.actualCostMicros, newItems: written.length, errorCode: row.errorCode });
   }
+
+  // The screenshot was only held in case the page changed.
+  if (spends && withShot && !called.has(shotKey)) await store.releaseReservation(shotKey, now);
 
   const allFailed = outcome.calls.length > 0 && outcome.calls.every((c) => c.status === "failed" || c.status === "blocked" || c.status === "stopped");
   const failures = allFailed ? monitor.consecutiveFailures + 1 : 0;
@@ -240,8 +286,9 @@ async function handlePage(
   monitor: Monitor,
   result: unknown,
   settings: Settings,
-  takeScreenshot: () => Promise<{ row: Omit<Run, "id" | "ownerId">; result: unknown; ok: boolean } | null>,
+  takeScreenshot: () => Promise<{ row: Omit<Run, "id" | "ownerId">; result: unknown; ok: boolean; pending: boolean } | null>,
   outcome: RunOutcome,
+  finish: (row: Omit<Run, "id" | "ownerId">) => Promise<void>,
 ): Promise<NewAlert[]> {
   const page = parsePage(result);
   const text = normalize(page.content, [...settings.ignorePatterns, ...(monitor.config.ignore ?? [])]);
@@ -256,8 +303,11 @@ async function handlePage(
   if (last.contentHash === h) return [];
   const d = diffPages(last.content, text);
   const shot = await takeScreenshot();
-  if (shot) {
+  if (shot?.pending) {
+    outcome.calls.push({ source: "screenshot", status: "pending", costMicros: 0, newItems: 0, errorCode: null });
+  } else if (shot) {
     const stored = await deps.store.insertRun(shot.row);
+    await finish(shot.row);
     if (stored) {
       outcome.costMicros += shot.row.actualCostMicros;
       outcome.calls.push({ source: "screenshot", status: shot.row.status, costMicros: shot.row.actualCostMicros, newItems: 0, errorCode: shot.row.errorCode });

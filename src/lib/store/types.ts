@@ -1,3 +1,4 @@
+import type { BudgetStatus, Reservation, ReserveRequest, ReserveResult } from "../budget";
 import type { Alert, AlertState, Monitor, Run, SerpRow, Settings, Severity, Snapshot } from "../types";
 
 export interface AlertQuery {
@@ -73,6 +74,22 @@ export interface Store {
   insertRun(run: Omit<Run, "id" | "ownerId">): Promise<Run | null>;
   /** Sum of actual cost since an instant, for one monitor or for all. */
   spentSince(since: string, monitorId?: string): Promise<number>;
+
+  /**
+   * Holds the quoted price of every item against the daily budget, the monthly budget and the
+   * monitor's cap, all or none, in one atomic step. Two simultaneous callers cannot both pass.
+   */
+  reserveBudget(req: ReserveRequest): Promise<ReserveResult>;
+  /** The run row holds the real cost now. The reservation stops counting. Only a reserved row changes. */
+  settleReservation(key: string, at: Date): Promise<void>;
+  /** The call failed or was refused. The reservation stops counting. Only a reserved row changes. */
+  releaseReservation(key: string, at: Date): Promise<void>;
+  /** The call is accepted but not finished. Remembers the looot run id; the reservation keeps counting. */
+  holdReservation(key: string, loootRunId: string): Promise<void>;
+  /** Reserved rows past their soft expiry, oldest first. */
+  listExpiredReservations(at: Date): Promise<Reservation[]>;
+  /** Used, held and left for today and this month. */
+  budgetStatus(at: Date): Promise<BudgetStatus>;
 
   listSnapshots(monitorId: string): Promise<Snapshot[]>;
   getSnapshot(id: string): Promise<Snapshot | null>;

@@ -98,7 +98,11 @@ For the web app, copy `.env.example` to `.env.local` (Next.js reads it) and foll
 
 - Every check shows its price before it runs. The terminal command prints the quote, and the app shows a quote panel before you save a monitor.
 - `maxSpendPerRunUsd` in the watchlist (default in the example $0.12) stops a run. Pages past it are not called. `monthlyCapUsd` (example $4) is a calendar-month cap in UTC.
-- In the app you confirm a max cost per run and a monthly cap for each monitor. A workspace cap in Settings applies across all monitors.
+- In the app you confirm a max cost per run and a monthly cap for each monitor. The owner sets a daily budget and a monthly budget for the whole workspace in Settings (defaults $1 a day, $3 a month). They live in the `settings` table, so a run request cannot change them.
+- **Reservation.** Before a paid call the app quotes the price, checks the per-run cap, then reserves the quoted price in one database step. The step locks your settings row, adds spent + already reserved + this price, and refuses if that passes the daily budget, the monthly budget or the monitor's cap. Two runs that start at the same moment cannot both pass. Every call of a run is reserved together, all or none, and the screenshot of a page monitor is held in case the page changed.
+- **What a reservation means.** It is money set aside for a call that has not finished, and it counts against the budget as if it were spent. A completed call settles to its real cost. A failed or refused call releases it. A call looot accepted but did not finish (`queued`, `running`, `pending_provider`, `reconciliation_pending`) keeps its reservation, is not written as failed and does not give budget back. The sidebar and the Spend page show used, held and left for today (UTC) and for the month.
+- **Crashes and slow runs.** A reservation older than 15 minutes is checked against the run (`GET /v1/runs/{id}`) the next time any run starts. A finished run is settled to its real cost or released. A run that is still pending, or cannot be fetched, stays reserved until 24 hours after it was made, then it is released. A run that finishes after that is not counted, so keep the looot token balance as the last limit.
+- The `watch` command and watchlists are separate. They use one in-process store, the per-run max and the monthly cap from the file, and no daily budget.
 - List prices. A page read on `serper-webpage` is $0.002. A mentions monitor on all four sources is $0.0056 a run. The 53-page watchlist is $0.106 a run, $3.18 a month at one run a day. Full table in [looot jobs and prices](#looot-jobs-and-prices).
 - A failed call costs nothing and is recorded with its error code. Each page has one idempotency key per UTC day, so a second run in the same day makes no call. `--force` runs again and is charged again.
 
@@ -107,7 +111,7 @@ For the web app, copy `.env.example` to `.env.local` (Next.js reads it) and foll
 The app uses Supabase Auth (magic link and GitHub) and a Postgres database. These steps use a hosted Supabase project, not a local Docker stack.
 
 1. Create a project in the Supabase dashboard. Copy the project URL and the anon key from Project Settings, API into `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
-2. Apply the schema. There is one migration, `supabase/migrations/20261008000000_init.sql`. Either link and push from a clone of this repo:
+2. Apply the schema. There are two migrations, `supabase/migrations/20261008000000_init.sql` and `supabase/migrations/20261011000000_period_budget.sql` (the daily budget column and the `budget_reservations` table, additive). Either link and push from a clone of this repo:
 
    ```bash
    npx supabase@2.118.0 login
@@ -115,7 +119,7 @@ The app uses Supabase Auth (magic link and GitHub) and a Postgres database. Thes
    npx supabase@2.118.0 db push
    ```
 
-   Or open the SQL editor in the Supabase dashboard, paste the whole file and run it.
+   Or open the SQL editor in the Supabase dashboard, paste each file in order and run it. If you already run 0.1.5, apply only `20261011000000_period_budget.sql` before you deploy 0.1.6. Without it every paid run fails with a missing function error and makes no call.
 3. Under Authentication, URL Configuration, add the redirect URLs. The app sends the magic link and the GitHub sign-in to `<origin>/auth/callback` (`src/app/auth/callback/route.ts`).
    - `http://localhost:3000/auth/callback` for `npm run dev`
    - `https://<your-app-domain>/auth/callback` for the deployed app
@@ -267,9 +271,9 @@ Money is stored as integer micro-dollars. `LOOOT_TOKEN` is read only in `src/lib
 
 ## Data and security
 
-Seven tables in `supabase/migrations`: `settings`, `monitors`, `monitor_sources`, `runs`, `snapshots`, `serp_results`, `alerts`. Every table has an `owner_id` that defaults to `auth.uid()`, row level security enabled and forced, and select, insert, update and delete policies on `owner_id = auth.uid()`. A trigger rejects a child row whose parent has another owner.
+Eight tables in `supabase/migrations`: `settings`, `monitors`, `monitor_sources`, `runs`, `snapshots`, `serp_results`, `alerts`, `budget_reservations`. Every table has an `owner_id` that defaults to `auth.uid()`, row level security enabled and forced, and select, insert, update and delete policies on `owner_id = auth.uid()`. A trigger rejects a child row whose parent has another owner.
 
-`npm run test:rls` applies the migration to a throwaway local Postgres (`initdb`, `pg_ctl` and `psql` on PATH, no containers) and checks that a second user reads, updates and deletes zero rows of the first in all seven tables. It skips with a note when PostgreSQL is not installed.
+`npm run test:rls` applies the migration to a throwaway local Postgres (`initdb`, `pg_ctl` and `psql` on PATH, no containers) and checks that a second user reads, updates and deletes zero rows of the first in all eight tables. It skips with a note when PostgreSQL is not installed.
 
 ## Securing a deployment
 
@@ -279,13 +283,15 @@ Versions before 0.1.4 let any signed-in Supabase user use the workspace. A new S
 - **No list, no access.** Outside demo mode with neither variable set, nobody is let in. Pages go to a setup page and the API answers 503 `setup_required`. The first user to sign in never becomes an admin by default.
 - **Turn off public sign-ups** in your Supabase project (Authentication, Sign In / Providers). The allow-list is the lock. This is the door you do not need open.
 - **Public routes.** `/login`, `/access`, `/auth/callback` and static files. `/api/cron` is also reachable but answers 401 unless the request carries `Authorization: Bearer <CRON_SECRET>`, compared in constant time. Everything else is closed. A route you add later is closed too, and `npm test` fails if it is not.
-- **Paid runs.** The cap is the monitor's saved max cost per run, the monthly cap and the workspace cap. A request can lower the max for one run but never raise it. Every run is checked against the live price first. The idempotency key is `man:<monitor>:<source>:<confirmId>`, so a retried request charges once. Each user is limited to 10 paid runs a minute (kept in memory, so per server instance).
+- **Paid runs.** The limits are the monitor's saved max cost per run, its monthly cap, and the workspace daily and monthly budget. A request can lower the max for one run but never raise it, and the budget fields are not read from a run request at all. Only the owner's settings call changes them. Every run is checked against the live price first. The idempotency key is `man:<monitor>:<source>:<confirmId>`, so a retried request charges once. Each user is limited to 10 paid runs a minute (kept in memory, so per server instance).
 - **One token, several users.** `LOOOT_TOKEN` belongs to the operator. Every allowed user spends from it, each inside their own workspace cap. Row level security keeps their rows apart (`npm run test:rls`). Allow only people who may spend your balance.
 - **CSRF.** Every POST, PATCH, PUT and DELETE to `/api` needs a same-origin `Origin` header (or `Sec-Fetch-Site: same-origin`) and the token. The proxy sets the token in the `monitor_csrf` cookie and the app's own calls copy it into the `x-monitor-csrf` header. A cross-site request gets 403 `csrf_origin`, a missing or wrong token 403 `csrf_token`. The proxy and each route handler both check. The app has no server actions. Next.js checks Origin against Host for those itself (in 16.3.8), but not for route handlers, so these checks cover them. `/api/cron` is exempt because it needs the `CRON_SECRET` bearer instead of a browser cookie.
 - **Sign-in redirects.** `/auth/callback` ignores `next` and `redirectTo` and always lands on `/`.
 - **Stronger option.** Put the deployment behind a VPN or an identity-aware proxy (Cloudflare Access, Tailscale, Vercel Deployment Protection) so strangers cannot reach the login page at all.
 
-The 10-a-minute rate limit lives in memory, so each server instance counts for itself. On a host that runs several instances (several Vercel function instances, several containers) a user can get 10 paid runs a minute from each one. Treat it as a per-instance brake. The hard limit is the spend cap: the per-run max, the monthly cap per monitor and the workspace cap are rows in your Supabase database, and every run reads them and the month's spend (the `spent_since` function over the `runs` table) before it calls looot. Nothing about the cap sits in memory. The check reads the spend, then the run writes its cost afterwards, so runs that start at the same moment on different instances can each pass the check. The overshoot is at most the number of simultaneous runs times the per-run max. If you need a tighter bound, lower the per-run max, and rate limit at your proxy or CDN as well.
+The 10-a-minute rate limit lives in memory, so each server instance counts for itself. On a host that runs several instances (several Vercel function instances, several containers) a user can get 10 paid runs a minute from each one. Treat it as a per-instance brake. The hard limit is the budget in your database. The per-run max, the monthly cap per monitor and the workspace daily and monthly budget are rows in Supabase. Before each paid call the `reserve_budget` function locks your settings row, adds spent (`runs`) and reserved (`budget_reservations`) and writes the reservation in the same transaction. Runs that start at the same moment on different instances queue on that lock, so the sum of what they hold never passes the budget. Nothing about the budget sits in memory. Before 0.1.6 the check read the spend and the run wrote its cost afterwards, so simultaneous runs could each pass. That is fixed.
+
+What the budget does not cover. A call that costs more than its quote is settled at the real cost, so a day can end slightly over. A reservation released after 24 hours for a run that never reported back may have cost money that no row records. And the budget only limits calls this app makes. **The looot token balance is the final limit.** Create a dedicated token for this app and fund it with only what you are willing to spend. If the app, its database or a signed-in user is ever compromised, that balance is all an attacker can spend.
 
 ## Troubleshooting
 

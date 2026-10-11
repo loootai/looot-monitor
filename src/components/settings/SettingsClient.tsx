@@ -55,6 +55,7 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
   const toast = useToast();
   const [s, setS] = React.useState(initial);
   const [cap, setCap] = React.useState(dollars(initial.workspaceCapMicros));
+  const [daily, setDaily] = React.useState(dollars(initial.dailyBudgetMicros));
   const [defCap, setDefCap] = React.useState(dollars(initial.defaultCapMicros));
   const [test, setTest] = React.useState<{ state: "idle" | "busy" | "ok" | "error"; text?: string }>({ state: "idle" });
   const [preview, setPreview] = React.useState<string | null>(null);
@@ -170,9 +171,12 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
           {!tokenSet && !demo ? <p className="text-12 text-mute">Add {tokenEnv} to the environment of your deployment, then redeploy. Reading the balance is free.</p> : null}
         </Section>
 
-        <Section id="budget" title="Budget" note="Both caps are checked before every run. A run that would pass a cap is refused and no call is made.">
+        <Section id="budget" title="Budget" note="Before each paid call the app holds its quoted price against the daily and monthly budget. A run that would pass either is refused and no call is made. The price a run holds counts until it finishes. Only the owner can change these numbers; a run request cannot.">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Workspace monthly cap, in dollars" htmlFor="s-cap" help="Across all monitors, per calendar month.">
+            <Field label="Daily budget, in dollars" htmlFor="s-daily" help="Across all monitors, per UTC day.">
+              <Input id="s-daily" inputMode="decimal" className="num" value={daily} onChange={(e) => setDaily(e.target.value)} />
+            </Field>
+            <Field label="Monthly budget, in dollars" htmlFor="s-cap" help="Across all monitors, per calendar month (UTC).">
               <Input id="s-cap" inputMode="decimal" className="num" value={cap} onChange={(e) => setCap(e.target.value)} />
             </Field>
             <Field label="Default cap for new monitors, in dollars" htmlFor="s-def" help="The form suggests 1.5 times the projection when that is higher.">
@@ -183,8 +187,9 @@ export function SettingsClient({ initial, tokenSet, tokenEnv, demo, user, source
             onClick={() => {
               const a = Math.round(Number(cap) * 1_000_000);
               const b = Math.round(Number(defCap) * 1_000_000);
-              if (!Number.isFinite(a) || a < 0 || !Number.isFinite(b) || b < 0) return toast({ text: "Enter amounts of zero or more", tone: "error" });
-              void save({ workspaceCapMicros: a, defaultCapMicros: b }, "Budget saved");
+              const d = Math.round(Number(daily) * 1_000_000);
+              if (![a, b, d].every((n) => Number.isFinite(n) && n >= 0)) return toast({ text: "Enter amounts of zero or more", tone: "error" });
+              void save({ workspaceCapMicros: a, defaultCapMicros: b, dailyBudgetMicros: d }, "Budget saved");
             }}
           >
             Save budget

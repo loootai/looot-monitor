@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { RESERVATION_HARD_SECONDS, RESERVATION_SOFT_SECONDS, windowOf, type BudgetScope, type BudgetStatus, type Reservation, type ReserveRequest, type ReserveResult } from "../budget";
+import { dayStart, monthStart } from "../schedule";
 import { endpointFor, sourcesFor, SOURCES } from "../sources";
 import { DEFAULT_SETTINGS, type Alert, type Monitor, type Run, type Settings, type Snapshot } from "../types";
 import type { AlertCounts, AlertPatch, AlertQuery, NewMonitor, RunQuery, SerpResult, Store } from "./types";
@@ -7,7 +9,7 @@ type Row = Record<string, unknown>;
 
 const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 const camel = (k: string) => k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-const NUMERIC = new Set(["workspace_cap_micros", "default_cap_micros", "max_cost_per_run_micros", "monthly_cap_micros", "quoted_micros", "actual_cost_micros"]);
+const NUMERIC = new Set(["workspace_cap_micros", "daily_budget_micros", "amount_micros", "default_cap_micros", "max_cost_per_run_micros", "monthly_cap_micros", "quoted_micros", "actual_cost_micros"]);
 
 /** Database row to app object: snake_case keys become camelCase, bigint text becomes a number. Nested json is left alone. */
 function fromRow<T>(row: Row): T {
@@ -21,6 +23,15 @@ function toRow(obj: object, omit: string[] = []): Row {
   const out: Row = {};
   for (const [k, v] of Object.entries(obj)) if (!omit.includes(k) && v !== undefined) out[snake(k)] = v;
   return out;
+}
+
+/** The jsonb reserve_budget() returns, as a ReserveResult. */
+function fromReserveReply(d: unknown): ReserveResult {
+  const r = d as { ok: boolean; reason?: string; scope?: BudgetScope; daily: { budget: number; spent: number; reserved: number }; monthly: { budget: number; spent: number; reserved: number } };
+  const budget: BudgetStatus = { daily: windowOf(Number(r.daily.budget), Number(r.daily.spent), Number(r.daily.reserved)), monthly: windowOf(Number(r.monthly.budget), Number(r.monthly.spent), Number(r.monthly.reserved)) };
+  if (r.ok) return { ok: true, budget };
+  if (r.reason === "duplicate") return { ok: false, reason: "duplicate" };
+  return { ok: false, reason: "budget", scope: r.scope ?? "daily", budget };
 }
 
 const fail = (what: string, error: { message: string } | null) => {
@@ -171,6 +182,51 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.db.rpc("spent_since", { p_owner: this.ownerId, p_since: since, p_monitor: monitorId ?? null });
     fail("sum spend", error);
     return Number(data ?? 0);
+  }
+
+  async reserveBudget(req: ReserveRequest): Promise<ReserveResult> {
+    const { data, error } = await this.db.rpc("reserve_budget", {
+      p_owner: this.ownerId,
+      p_monitor: req.monitorId,
+      p_items: req.items.map((i) => ({ key: i.key, source: i.source, endpoint_id: i.endpointId, amount_micros: i.amountMicros })),
+      p_trigger: req.trigger,
+      p_slot: req.slot,
+      p_now: req.now.toISOString(),
+      p_day_start: dayStart(req.now).toISOString(),
+      p_month_start: monthStart(req.now).toISOString(),
+      p_soft_seconds: RESERVATION_SOFT_SECONDS,
+      p_hard_seconds: RESERVATION_HARD_SECONDS,
+    });
+    fail("reserve budget", error);
+    return fromReserveReply(data);
+  }
+  async settleReservation(key: string, at: Date): Promise<void> {
+    const { error } = await this.db.rpc("settle_reservation", { p_owner: this.ownerId, p_key: key, p_now: at.toISOString() });
+    fail("settle reservation", error);
+  }
+  async releaseReservation(key: string, at: Date): Promise<void> {
+    const { error } = await this.db.rpc("release_reservation", { p_owner: this.ownerId, p_key: key, p_now: at.toISOString() });
+    fail("release reservation", error);
+  }
+  async holdReservation(key: string, loootRunId: string): Promise<void> {
+    const { error } = await this.db.rpc("hold_reservation", { p_owner: this.ownerId, p_key: key, p_looot_run_id: loootRunId });
+    fail("hold reservation", error);
+  }
+  async listExpiredReservations(at: Date): Promise<Reservation[]> {
+    const { data, error } = await this.db.from("budget_reservations").select("*").eq("owner_id", this.ownerId).eq("state", "reserved").lte("expires_at", at.toISOString()).order("created_at", { ascending: true }).limit(200);
+    fail("list reservations", error);
+    return (data ?? []).map((r) => {
+      const row = fromRow<Reservation & { idempotencyKey: string; amountMicros: number }>(r);
+      const { idempotencyKey, ...rest } = row;
+      return { ...rest, key: idempotencyKey };
+    });
+  }
+  async budgetStatus(at: Date): Promise<BudgetStatus> {
+    const s = await this.getSettings();
+    const [spentDay, spentMonth, held] = await Promise.all([this.spentSince(dayStart(at).toISOString()), this.spentSince(monthStart(at).toISOString()), this.db.from("budget_reservations").select("amount_micros").eq("owner_id", this.ownerId).eq("state", "reserved").limit(5000)]);
+    fail("sum reservations", held.error);
+    const reserved = (held.data ?? []).reduce((n, r) => n + Number(r.amount_micros), 0);
+    return { daily: windowOf(s.dailyBudgetMicros, spentDay, reserved), monthly: windowOf(s.workspaceCapMicros, spentMonth, reserved) };
   }
 
   async listSnapshots(monitorId: string): Promise<Snapshot[]> {

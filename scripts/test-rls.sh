@@ -19,7 +19,7 @@ for f in "$root"/supabase/migrations/*.sql; do p -f "$f"; done
 out="$(p -At -f "$root/supabase/tests/rls_check.sql" 2>&1)"
 echo "$out"
 fail() { echo "RLS check FAILED: $1"; exit 1; }
-tables="settings monitors monitor_sources runs snapshots serp_results alerts"
+tables="settings monitors monitor_sources runs snapshots serp_results alerts budget_reservations"
 for t in $tables; do
   [[ "$out" == *"user1 sees $t|1"* ]] || fail "user1 should see 1 row in $t"
   [[ "$out" == *"user2 sees $t|0"* ]] || fail "user2 should see 0 rows in $t"
@@ -32,6 +32,6 @@ done
 [[ "$out" == *"spoofed owner_id refused by RLS"* ]] || fail "spoofed owner accepted"
 [[ "$out" == *"alert under another user monitor refused"* ]] || fail "alert under another user's monitor accepted"
 [[ "$out" == *"run under another user monitor refused"* ]] || fail "run under another user's monitor accepted"
-[[ "$out" == *"user1 still has|7"* ]] || fail "user1 lost rows"
+[[ "$out" == *"user1 still has|8"* ]] || fail "user1 lost rows"
 [[ "$out" != *"ACCEPTED"* ]] || fail "a refused write went through"
-echo "RLS check passed: 7 tables"
+echo "RLS check passed: 8 tables"

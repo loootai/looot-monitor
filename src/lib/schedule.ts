@@ -43,6 +43,16 @@ export function manualKey(monitorId: string, source: string, confirmId: string):
   return `man:${monitorId}:${source}:${confirmId}`;
 }
 
+/** First instant of the UTC day `at` is in. */
+export function dayStart(at: Date): Date {
+  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+}
+
+/** First instant of the next UTC day. */
+export function nextDayStart(at: Date): Date {
+  return new Date(dayStart(at).getTime() + 86_400_000);
+}
+
 /** First instant of the calendar month `at` is in, UTC. */
 export function monthStart(at: Date): Date {
   return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1));

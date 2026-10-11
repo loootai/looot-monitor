@@ -144,7 +144,10 @@ export interface Alert {
 }
 
 export interface Settings {
+  /** The monthly budget for the whole workspace. Reserved against before every paid call. */
   workspaceCapMicros: number;
+  /** The daily budget for the whole workspace, UTC day. Reserved against before every paid call. */
+  dailyBudgetMicros: number;
   defaultCapMicros: number;
   escalationWords: string[];
   priorityDomains: string[];
@@ -172,6 +175,7 @@ export interface Item {
 
 export const DEFAULT_SETTINGS: Settings = {
   workspaceCapMicros: 3_000_000,
+  dailyBudgetMicros: 1_000_000,
   defaultCapMicros: 250_000,
   escalationWords: ["outage", "breach", "lawsuit", "scam", "refund", "down", "leak"],
   priorityDomains: [],
