@@ -1,4 +1,6 @@
-<p align="center"><img src="assets/hero.png" alt="looot-monitor: an alert inbox with a page diff, and a spend dashboard" width="100%"></p>
+<p align="center"><img src="docs/media/banner.png" alt="looot-monitor: a page diff in the alert inbox and a spend dashboard, next to the logos of Clay, Apify, Firecrawl, Exa, Tavily and looot" width="100%"></p>
+
+<sub>Logos and names belong to their owners. Public data from a live run on 2026-10-13. No affiliation. The app screens use seeded Demo data.</sub>
 
 # looot monitor
 
@@ -9,6 +11,36 @@
 An open-source monitoring app for your brand and your competitors. You create monitors, each one runs on a schedule, and anything new lands in one alert inbox with a severity. Every monitor shows its price per run before it runs and stops at the monthly cap you set.
 
 It runs on Next.js and Supabase (auth and Postgres), deploys to Vercel, and gets its data from [looot](https://looot.ai): one key and one prepaid balance for 2,500+ data API endpoints. This project is built on looot. It is not the looot dashboard.
+
+## Live run
+
+On 2026-10-13 (UTC) I ran `npm run watch` on six pricing pages of looot's neighbours: Clay, Apify, Firecrawl, Exa, Tavily and looot itself. The quote was $0.012 a run. I ran it twice, the second time with `--force` about two minutes later.
+
+| | |
+|---|---|
+| Calls | 12, all `serper-webpage`, all completed |
+| Charged | $0.024 ($0.012 a run) |
+| Pages read | 6 of 6 each run |
+| Changes found | 0 on the second run. The first run is a baseline and reports none |
+
+What came back:
+
+- Clay, Apify, Firecrawl, Exa and looot returned readable text with real prices ($167 and $446 a month on Clay, $5 to $999 on Apify, $83 on Firecrawl, $4 to $15 per 1,000 searches on Exa).
+- The Tavily page came back as 2,321 characters of script output and no plan prices. That monitor would need a different reader or URL.
+- No page changed between two runs two minutes apart, so no diff alert exists from this run. The diff, inbox and spend screens below are seeded Demo data for a made-up company, not this run.
+- Mentions of looot were not part of the live run. The terminal command reads pages only. Mention monitors need the web app.
+
+| | |
+|---|---|
+| ![Quote before the run](docs/media/card-quote.png) | ![What the first run stored](docs/media/card-baseline.png) |
+| ![Second run and its cost](docs/media/card-rerun.png) | ![Inbox, Demo data](docs/media/card-inbox.png) |
+| ![Page diff, Demo data](docs/media/card-diff.png) | ![Spend, Demo data](docs/media/card-spend.png) |
+
+![Walkthrough](docs/media/demo.gif)
+
+[demo.mp4](docs/media/demo.mp4)
+
+Logos and names belong to their owners. Public data from a live run on 2026-10-13. No affiliation.
 
 ## What it replaces
 

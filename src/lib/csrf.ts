@@ -1,8 +1,9 @@
 /**
  * CSRF protection for state-changing requests. Two checks, both must pass:
  *
- * 1. Same origin. The Origin header names this app's own host. A request with no Origin falls back to
- *    Sec-Fetch-Site (same-origin or none). A request with neither is refused.
+ * 1. Same origin. The Origin header names this app's own host. A request with no Origin, or with
+ *    `Origin: null` (Chrome sends it from a form post under `Referrer-Policy: no-referrer`), falls
+ *    back to Sec-Fetch-Site (same-origin or none). A request with neither is refused.
  * 2. Token. The proxy sets a random token in the readable cookie `monitor_csrf`. The app's own
  *    fetch calls copy it into the `x-monitor-csrf` header. The two must match. A page on another
  *    site can neither read the cookie nor set the header on a cross-site request.
@@ -51,7 +52,7 @@ function sameText(a: string, b: string): boolean {
 export function sameOrigin(h: Headers): boolean {
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const origin = h.get("origin");
-  if (origin) {
+  if (origin && origin !== "null") {
     try {
       return !!host && new URL(origin).host === host;
     } catch {

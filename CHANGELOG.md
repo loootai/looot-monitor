@@ -2,6 +2,10 @@
 
 Built from the GitHub release notes. Each version links to its release page.
 
+## Unreleased
+
+- The same-origin check treats `Origin: null` like a missing Origin and falls back to `Sec-Fetch-Site: same-origin`. Chrome sends `null` from a form post under `Referrer-Policy: no-referrer`. A cross-site request is still refused.
+
 ## 0.1.6 (2026-10-11)
 
 Spend limits that hold under concurrency. Before this version the budget check read the month's spend and the run wrote its cost afterwards, so runs that started together on different instances could each pass and together pass the cap.
